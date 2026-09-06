@@ -273,7 +273,8 @@
     filtros: { dataInicio: "", dataFim: "", cliente: "", fazenda: "" },
     relatorioAtualId: null,
     cadastrosAdmin: [], categoriaAtiva: "cliente", cadastrosCarregados: false,
-    regrasAdmin: [], regrasCarregadas: false
+    regrasAdmin: [], regrasCarregadas: false,
+    configAtividadeSelecionada: ""
   };
 
   function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){
@@ -1062,6 +1063,15 @@
   // literalmente "Cliente:NomeDoCampo". Equipamento/Operador ficam de fora
   // de propósito -- sempre obrigatórios, sem opção de tornar opcional.
   var CAMPOS_CONFIGURAVEIS = ["UP", "Trecho", "Comprimento", "Largura", "Profundidade", "DMT", "Tipo", "Quantidade", "Hora Inicial", "Hora Final", "Observação"];
+  // Quais desses campos existem de verdade em cada formulário -- usado só
+  // pra FILTRAR a matriz quando uma atividade específica está selecionada
+  // (não faz sentido oferecer "Comprimento" pra configurar numa atividade
+  // que usa o formulário Hora Máquina, que nem tem esse campo).
+  var CAMPOS_POR_FORMULARIO = {
+    padrao: ["UP", "Trecho", "Comprimento", "Largura", "Profundidade", "DMT", "Observação"],
+    hora_maquina: ["Tipo", "Hora Inicial", "Hora Final", "Observação"],
+    maquinas_detalhado: ["UP", "Trecho", "Quantidade", "Comprimento", "Largura", "Profundidade", "Hora Inicial", "Hora Final", "Observação"]
+  };
 
   function renderTelaConfiguracoes(){
     if (!App.cadastrosCarregados || !App.regrasCarregadas){
@@ -1089,28 +1099,52 @@
 
     html += '<div class="config-section">';
     html += '<div class="section-title" style="margin-top:0">Campos obrigatórios por cliente</div>';
-    html += '<p class="helper-text" style="margin-top:0">Marcado = obrigatório no PWA para esse cliente. Sem marcação em nenhum cliente, o campo fica obrigatório por padrão.</p>';
+    html += '<p class="helper-text" style="margin-top:0">Marcado = obrigatório no PWA para esse cliente. Sem marcação em nenhum cliente, o campo fica obrigatório por padrão. Escolha uma atividade específica pra abrir uma exceção só pra ela -- sem escolher, a regra é "Geral" e vale pra qualquer atividade que tenha aquele campo.</p>';
+    html += '<div class="field" style="max-width:320px; margin-bottom:14px;"><label>Aplicar para</label>'+
+      '<select id="config-atividade-select" class="filtro-campo-select" style="width:100%;">'+
+      '<option value=""'+(App.configAtividadeSelecionada===""?" selected":"")+'>Geral (todas as atividades)</option>'+
+      atividades.map(function(a){
+        return '<option value="'+esc(a.valor)+'"'+(App.configAtividadeSelecionada===a.valor?" selected":"")+'>'+esc(a.valor)+'</option>';
+      }).join("")+
+      '</select></div>';
+
     if (!clientes.length){
       html += '<div class="empty-state">Cadastre ao menos um cliente antes de configurar isso.</div>';
     } else {
-      html += '<div class="tabela-wrap tabela-matriz-scroll"><table class="tabela-matriz"><thead><tr><th>Campo</th>'+
-        clientes.map(function(c){ return '<th>'+esc(c.valor)+'</th>'; }).join("")+
-        '</tr></thead><tbody>'+
-        CAMPOS_CONFIGURAVEIS.map(function(campo){
-          return '<tr><td>'+esc(campo)+'</td>'+
-            clientes.map(function(c){
-              var chave = c.valor+":"+campo;
-              var marcado = valorRegra("campo_obrigatorio", chave, true);
-              return '<td><input type="checkbox" data-chave="'+esc(chave)+'" '+(marcado?"checked":"")+'></td>';
-            }).join("")+
-          '</tr>';
-        }).join("")+
-        '</tbody></table></div>';
+      var atividadeSel = App.configAtividadeSelecionada;
+      var prefixoChave = atividadeSel ? (atividadeSel+":") : "";
+      var formularioSel = atividadeSel ? valorRegra("formulario_atividade", atividadeSel, "padrao") : null;
+      var camposMostrados = atividadeSel
+        ? CAMPOS_CONFIGURAVEIS.filter(function(c){ return (CAMPOS_POR_FORMULARIO[formularioSel]||[]).indexOf(c) !== -1; })
+        : CAMPOS_CONFIGURAVEIS;
+
+      if (!camposMostrados.length){
+        html += '<div class="empty-state">Essa atividade não tem campo configurável (formulário sem campos opcionais).</div>';
+      } else {
+        html += '<div class="tabela-wrap tabela-matriz-scroll"><table class="tabela-matriz"><thead><tr><th>Campo</th>'+
+          clientes.map(function(c){ return '<th>'+esc(c.valor)+'</th>'; }).join("")+
+          '</tr></thead><tbody>'+
+          camposMostrados.map(function(campo){
+            return '<tr><td>'+esc(campo)+'</td>'+
+              clientes.map(function(c){
+                var chave = c.valor+":"+prefixoChave+campo;
+                var marcado = valorRegra("campo_obrigatorio", chave, true);
+                return '<td><input type="checkbox" data-chave="'+esc(chave)+'" '+(marcado?"checked":"")+'></td>';
+              }).join("")+
+            '</tr>';
+          }).join("")+
+          '</tbody></table></div>';
+      }
     }
     html += '</div></div>';
     return html;
   }
   function ligarTelaConfiguracoes(){
+    var selAtividade = document.getElementById("config-atividade-select");
+    if (selAtividade) selAtividade.onchange = function(){
+      App.configAtividadeSelecionada = this.value;
+      render();
+    };
     document.querySelectorAll('select[data-atividade]').forEach(function(sel){
       sel.onchange = function(){
         salvarRegra("formulario_atividade", sel.getAttribute("data-atividade"), sel.value).then(function(ok){
