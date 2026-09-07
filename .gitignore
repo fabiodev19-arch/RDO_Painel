@@ -1,0 +1,22 @@
+# Este repositório é PÚBLICO e servido por GitHub Pages.
+# Tudo que entra aqui fica visível para qualquer pessoa, para sempre.
+
+# segredos — nunca versionar
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+service-account*.json
+supabase/.temp/
+supabase/.branches/
+
+# o CLI da Supabase baixa isso localmente, não precisa versionar
+.supabase/
+
+# dependências, se algum dia entrar um package.json
+node_modules/
+
+# arquivos de sistema operacional
+.DS_Store
+Thumbs.db
