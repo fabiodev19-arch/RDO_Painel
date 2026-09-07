@@ -132,6 +132,14 @@
   .tabela-matriz th, .tabela-matriz td{white-space:nowrap;}
   .tabela-matriz th:first-child, .tabela-matriz td:first-child{min-width:150px; white-space:normal;}
   .tabela-matriz th:not(:first-child), .tabela-matriz td:not(:first-child){width:130px; text-align:center;}
+  .th-cliente{margin-bottom:6px;}
+  .th-acoes-coluna{display:flex; flex-direction:column; gap:3px;}
+  .btn-coluna{
+    padding:3px 6px; border-radius:var(--radius-sm); border:1px solid var(--border);
+    background:var(--surface); color:var(--text-dim); font-size:10.5px; font-weight:600;
+    text-transform:none; letter-spacing:0; cursor:pointer; white-space:nowrap;
+  }
+  .btn-coluna:hover{background:var(--surface-3); color:var(--text);}
   .config-row{display:flex; align-items:flex-start; gap:32px; flex-wrap:wrap;}
   .config-section{min-width:0;}
   th{
@@ -158,6 +166,15 @@
   .ativ-detalhe .campos{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:10px;}
   .ativ-detalhe .campos .item label{font-size:10.5px; color:var(--text-dim); display:block;}
   .ativ-detalhe .campos .item .v{font-size:13.5px; font-weight:600;}
+  .badge-revisao{font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; white-space:nowrap;}
+  .badge-revisao.pendente{background:var(--surface-3); color:var(--text-dim);}
+  .badge-revisao.validado{background:var(--success-bg); color:var(--success);}
+  .badge-revisao.devolvido{background:var(--danger-bg); color:var(--danger);}
+  .ativ-motivo-devolucao{
+    font-size:12.5px; color:var(--danger); background:var(--danger-bg); border-radius:var(--radius-sm);
+    padding:8px 10px; margin-top:10px;
+  }
+  .ativ-acoes-revisao{display:flex; gap:8px; margin-top:12px; padding-top:12px; border-top:1px solid var(--border);}
   .lista-inline{font-size:13px; color:var(--text); margin:0;}
   .fotos-grid{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
   .fotos-grid img{width:84px; height:84px; object-fit:cover; border-radius:9px; border:1px solid var(--border); cursor:pointer;}
@@ -196,6 +213,22 @@
   .btn-tabela:hover{background:var(--surface-3);}
   .btn-tabela.perigo{border-color:var(--danger); color:var(--danger);}
   .btn-tabela.perigo:hover{background:var(--danger-bg);}
+  .celula-acoes-icone{display:flex; gap:8px; align-items:center; white-space:nowrap;}
+  .acao-icone{background:none; border:none; padding:2px; cursor:pointer; color:var(--text-dim);}
+  .acao-icone svg{width:16px; height:16px;}
+  .acao-icone:hover{color:var(--text);}
+  .acao-icone.perigo{color:var(--danger);}
+  .acao-icone.perigo:hover{color:var(--danger); opacity:.7;}
+  .acao-icone.sucesso{color:var(--success);}
+  .cad-paginacao{display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap;}
+  .btn-pagina{
+    width:28px; height:28px; border-radius:var(--radius-sm); border:1px solid var(--border);
+    background:var(--surface); color:var(--text); font-size:13px; cursor:pointer;
+  }
+  .btn-pagina:disabled{opacity:.4; cursor:default;}
+  .btn-pagina:not(:disabled):hover{background:var(--surface-3);}
+  .cad-paginacao-info{font-size:12.5px; color:var(--text-dim); margin:0 4px;}
+  .cad-paginacao-total{font-size:12.5px; color:var(--text-dim); margin-left:auto;}
 
   /* ---------- Toast / Modal ---------- */
   .toast{
@@ -210,6 +243,10 @@
   }
   .modal-overlay.show{opacity:1; pointer-events:auto;}
   .modal-box{background:var(--surface); border-radius:var(--radius); padding:20px; max-width:360px; width:100%; box-shadow:var(--shadow);}
+  .modal-textarea{
+    width:100%; padding:10px 12px; border-radius:var(--radius-sm); border:1px solid var(--border);
+    background:var(--surface-2); color:var(--text); font-size:13.5px; font-family:inherit; resize:vertical; margin:4px 0 2px;
+  }
   .modal-box h3{margin:0 0 8px; font-size:16px;}
   .modal-box p{margin:0 0 18px; font-size:13.5px; color:var(--text-dim); line-height:1.5;}
   .modal-box .actions{display:flex; gap:9px;}
@@ -274,7 +311,8 @@
     relatorioAtualId: null,
     cadastrosAdmin: [], categoriaAtiva: "cliente", cadastrosCarregados: false,
     regrasAdmin: [], regrasCarregadas: false,
-    configAtividadeSelecionada: ""
+    configAtividadeSelecionada: "",
+    cadastrosPagina: 1, cadastrosTamanhoPagina: 50
   };
 
   function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){
@@ -301,6 +339,22 @@
       '<button class="btn btn-primary" id="modal-ok" style="flex:1">'+esc(textoOk)+'</button></div>');
     document.getElementById("modal-cancel").onclick = hideModal;
     document.getElementById("modal-ok").onclick = function(){ hideModal(); onOk(); };
+  }
+  // Modal com campo de texto -- usado pro motivo da devolução. onOk só
+  // dispara com o texto preenchido (não deixa confirmar em branco).
+  function showPrompt(titulo, msg, placeholder, textoOk, onOk){
+    showModal('<h3>'+esc(titulo)+'</h3><p>'+esc(msg)+'</p>'+
+      '<textarea id="modal-prompt-texto" class="modal-textarea" placeholder="'+esc(placeholder)+'" rows="4"></textarea>'+
+      '<div class="actions">'+
+      '<button class="btn btn-secondary" id="modal-cancel" style="flex:1">Cancelar</button>'+
+      '<button class="btn btn-primary" id="modal-ok" style="flex:1">'+esc(textoOk)+'</button></div>');
+    document.getElementById("modal-cancel").onclick = hideModal;
+    document.getElementById("modal-ok").onclick = function(){
+      var texto = document.getElementById("modal-prompt-texto").value.trim();
+      if (!texto){ showToast("Escreva o motivo antes de confirmar."); return; }
+      hideModal();
+      onOk(texto);
+    };
   }
 
   function formatarData(iso){
@@ -330,6 +384,7 @@
   function editIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>'; }
   function banIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>'; }
   function undoIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg>'; }
+  function xIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6 6 18M6 6l12 12"/></svg>'; }
   function pinIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s7-6.6 7-12a7 7 0 1 0-14 0c0 5.4 7 12 7 12Z"/><circle cx="12" cy="9" r="2.4"/></svg>'; }
   function relatoriosNavIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h8l4 4v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v4h4M9 12h6M9 16h6M9 8h2"/></svg>'; }
   function cadastrosNavIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5.5" rx="7" ry="2.5"/><path d="M5 5.5V12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V5.5M5 12v6.5c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V12"/></svg>'; }
@@ -428,6 +483,26 @@
     });
   }
 
+  // Dispara a notificação push pro USUÁRIO que lançou a atividade devolvida
+  // (agora que o PWA tem login, não é mais endereçado por aparelho). Chama
+  // a função (Edge Function) que roda fora do banco -- só ela sabe a chave
+  // privada VAPID necessária pra assinar o envio. Isso é "melhor esforço":
+  // se falhar (usuário sem inscrição, rede instável), a devolução em si já
+  // foi salva no banco de qualquer forma -- o PWA também vê isso na
+  // checagem ativa ao abrir/sincronizar, então a notificação é um reforço,
+  // não a única forma de saber.
+  function dispararPushDevolucao(usuarioId, motivo){
+    fetch(SUPABASE_URL + "/functions/v1/enviar-push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + SUPABASE_ANON_KEY },
+      body: JSON.stringify({
+        usuario_id: usuarioId,
+        titulo: "Apontamento devolvido",
+        corpo: motivo
+      })
+    }).catch(function(){ /* melhor esforço -- devolução já foi salva de qualquer forma */ });
+  }
+
   function carregarCadastrosAdmin(){
     supabaseClient.rpc("listar_cadastros_admin").then(function(resp){
       if (resp.error){ showToast("Erro ao carregar cadastros: " + resp.error.message); return; }
@@ -465,6 +540,16 @@
       if (resp.error){ showToast("Erro: " + resp.error.message); return false; }
       carregarRegrasAdmin();
       return true;
+    });
+  }
+  // Mesma coisa mas sem recarregar a lista a cada chamada -- usado quando
+  // vários valores são salvos de uma vez (botão "marcar/desmarcar coluna
+  // toda"), pra não disparar N recarregamentos/re-renders em paralelo.
+  // Quem chamar isso é responsável por dar carregarRegrasAdmin() uma vez,
+  // no final do lote.
+  function salvarRegraSilenciosa(tipoRegra, chave, valor){
+    return supabaseClient.rpc("salvar_regra", { p_tipo_regra: tipoRegra, p_chave: chave, p_valor: valor }).then(function(resp){
+      return !resp.error;
     });
   }
   function valorRegra(tipoRegra, chave, padrao){
@@ -847,10 +932,19 @@
       var fotos = (a.fotos||[]).map(function(f){
         return '<img src="'+urlFotoPublica(f.storage_path)+'" data-full="'+urlFotoPublica(f.storage_path)+'">';
       }).join("");
-      return '<div class="ativ-detalhe">'+
-        '<div class="top"><span class="tipo">'+esc(a.tipo_atividade)+'</span></div>'+
+      var status = a.status_revisao || "pendente";
+      var badge = status === "validado" ? '<span class="badge-revisao validado">Validado</span>'
+        : status === "devolvido" ? '<span class="badge-revisao devolvido">Devolvido</span>'
+        : '<span class="badge-revisao pendente">Pendente de revisão</span>';
+      return '<div class="ativ-detalhe" data-atividade-id="'+a.id+'">'+
+        '<div class="top"><span class="tipo">'+esc(a.tipo_atividade)+'</span>'+badge+'</div>'+
         renderResumoAtividade(a)+
         (fotos ? '<div class="fotos-grid">'+fotos+'</div>' : '')+
+        (status === "devolvido" && a.motivo_devolucao ? '<div class="ativ-motivo-devolucao">Motivo da devolução: '+esc(a.motivo_devolucao)+'</div>' : '')+
+        '<div class="ativ-acoes-revisao">'+
+          '<button class="btn-tabela" data-id="'+a.id+'" data-action="validar-atividade">Validar</button>'+
+          '<button class="btn-tabela perigo" data-id="'+a.id+'" data-action="devolver-atividade">Devolver</button>'+
+        '</div>'+
       '</div>';
     }).join("");
 
@@ -858,6 +952,38 @@
   }
   function ligarTelaDetalhe(){
     document.getElementById("btn-voltar-dashboard").onclick = function(){ App.tela = "dashboard"; render(); };
+    document.querySelectorAll('[data-action="validar-atividade"]').forEach(function(btn){
+      btn.onclick = function(){
+        var id = btn.getAttribute("data-id");
+        showConfirm("Validar essa atividade?", "Ela seguirá para o relatório de fechamento.", "Validar", function(){
+          supabaseClient.rpc("validar_atividade_rdo", { p_atividade_id: id }).then(function(resp){
+            if (resp.error){ showToast("Erro: " + resp.error.message); return; }
+            showToast("Atividade validada.");
+            carregarRelatorios();
+          });
+        });
+      };
+    });
+    document.querySelectorAll('[data-action="devolver-atividade"]').forEach(function(btn){
+      btn.onclick = function(){
+        var id = btn.getAttribute("data-id");
+        showPrompt(
+          "Devolver essa atividade?",
+          "Descreva o que precisa ser corrigido. Isso volta pro PWA de quem lançou, com notificação.",
+          "Ex: profundidade não bate com o combinado, confirme no local",
+          "Devolver",
+          function(motivo){
+            supabaseClient.rpc("devolver_atividade_rdo", { p_atividade_id: id, p_motivo: motivo }).then(function(resp){
+              if (resp.error){ showToast("Erro: " + resp.error.message); return; }
+              showToast("Atividade devolvida.");
+              var usuarioId = resp.data && resp.data.usuario_id;
+              if (usuarioId) dispararPushDevolucao(usuarioId, motivo);
+              carregarRelatorios();
+            });
+          }
+        );
+      };
+    });
     document.querySelectorAll(".fotos-grid img").forEach(function(img){
       img.onclick = function(){
         showModal('<img src="'+img.getAttribute("data-full")+'">');
@@ -892,16 +1018,34 @@
     } else if (!itensCategoria.length){
       html += '<div class="empty-state">Nenhum valor cadastrado ainda nessa categoria.</div>';
     } else {
-      html += '<table class="tabela-tradicional"><thead><tr><th>Valor</th><th style="width:220px;">Ações</th></tr></thead><tbody>'+
-        itensCategoria.map(function(c){
+      var tam = App.cadastrosTamanhoPagina;
+      var totalPaginas = Math.max(1, Math.ceil(itensCategoria.length / tam));
+      var pagina = Math.min(App.cadastrosPagina, totalPaginas);
+      var inicio = (pagina - 1) * tam;
+      var itensPagina = itensCategoria.slice(inicio, inicio + tam);
+
+      html += '<div class="cad-paginacao">'+
+        '<button class="btn-pagina" id="btn-pagina-primeira" '+(pagina<=1?"disabled":"")+'>«</button>'+
+        '<button class="btn-pagina" id="btn-pagina-anterior" '+(pagina<=1?"disabled":"")+'>‹</button>'+
+        '<span class="cad-paginacao-info">Página '+pagina+' de '+totalPaginas+'</span>'+
+        '<button class="btn-pagina" id="btn-pagina-proxima" '+(pagina>=totalPaginas?"disabled":"")+'>›</button>'+
+        '<button class="btn-pagina" id="btn-pagina-ultima" '+(pagina>=totalPaginas?"disabled":"")+'>»</button>'+
+        '<select id="cad-tamanho-pagina" class="filtro-campo-select">'+
+          [20,50,100].map(function(n){ return '<option value="'+n+'"'+(tam===n?" selected":"")+'>'+n+' por página</option>'; }).join("")+
+        '</select>'+
+        '<span class="cad-paginacao-total">Exibindo '+(inicio+1)+'–'+Math.min(inicio+tam, itensCategoria.length)+' de '+itensCategoria.length+'</span>'+
+      '</div>';
+
+      html += '<table class="tabela-tradicional"><thead><tr><th style="width:70px;">Ações</th><th>Valor</th></tr></thead><tbody>'+
+        itensPagina.map(function(c){
           return '<tr class="'+(c.ativo?"":"linha-inativa")+'">'+
-            '<td>'+esc(c.valor)+'</td>'+
-            '<td>'+
-              '<button class="btn-tabela" data-id="'+c.id+'" data-action="editar">Editar</button> '+
+            '<td class="celula-acoes-icone">'+
               (c.ativo
-                ? '<button class="btn-tabela perigo" data-id="'+c.id+'" data-action="desativar">Desativar</button>'
-                : '<button class="btn-tabela" data-id="'+c.id+'" data-action="reativar">Reativar</button>')+
+                ? '<button class="acao-icone perigo" data-id="'+c.id+'" data-action="desativar" title="Desativar">'+xIcon()+'</button>'
+                : '<button class="acao-icone sucesso" data-id="'+c.id+'" data-action="reativar" title="Reativar">'+undoIcon()+'</button>')+
+              '<button class="acao-icone" data-id="'+c.id+'" data-action="editar" title="Editar">'+editIcon()+'</button>'+
             '</td>'+
+            '<td>'+esc(c.valor)+'</td>'+
           '</tr>';
         }).join("")+
       '</tbody></table>';
@@ -1010,8 +1154,26 @@
       inputImportar.value = "";
     };
     document.querySelectorAll(".cad-sidebar-item").forEach(function(btn){
-      btn.onclick = function(){ App.categoriaAtiva = btn.getAttribute("data-cat"); render(); };
+      btn.onclick = function(){ App.categoriaAtiva = btn.getAttribute("data-cat"); App.cadastrosPagina = 1; render(); };
     });
+    var btnPagPrimeira = document.getElementById("btn-pagina-primeira");
+    if (btnPagPrimeira) btnPagPrimeira.onclick = function(){ App.cadastrosPagina = 1; render(); };
+    var btnPagAnterior = document.getElementById("btn-pagina-anterior");
+    if (btnPagAnterior) btnPagAnterior.onclick = function(){ App.cadastrosPagina = Math.max(1, App.cadastrosPagina-1); render(); };
+    var btnPagProxima = document.getElementById("btn-pagina-proxima");
+    if (btnPagProxima) btnPagProxima.onclick = function(){ App.cadastrosPagina = App.cadastrosPagina+1; render(); };
+    var btnPagUltima = document.getElementById("btn-pagina-ultima");
+    if (btnPagUltima) btnPagUltima.onclick = function(){
+      var total = App.cadastrosAdmin.filter(function(c){ return c.categoria === App.categoriaAtiva; }).length;
+      App.cadastrosPagina = Math.max(1, Math.ceil(total / App.cadastrosTamanhoPagina));
+      render();
+    };
+    var selTamanhoPagina = document.getElementById("cad-tamanho-pagina");
+    if (selTamanhoPagina) selTamanhoPagina.onchange = function(){
+      App.cadastrosTamanhoPagina = Number(this.value);
+      App.cadastrosPagina = 1;
+      render();
+    };
     var btnAdd = document.getElementById("btn-cad-add");
     var inputNovo = document.getElementById("cad-novo-valor");
     function adicionar(){
@@ -1073,6 +1235,19 @@
     maquinas_detalhado: ["UP", "Trecho", "Quantidade", "Comprimento", "Largura", "Profundidade", "Hora Inicial", "Hora Final", "Observação"]
   };
 
+  // Compartilhado entre render e wiring -- assim o botão "marcar/desmarcar
+  // coluna toda" sabe exatamente a mesma lista de campos que está na tela
+  // (respeitando o filtro de atividade), sem duplicar a lógica.
+  function configContextoAtual(){
+    var atividadeSel = App.configAtividadeSelecionada;
+    var prefixoChave = atividadeSel ? (atividadeSel+":") : "";
+    var formularioSel = atividadeSel ? valorRegra("formulario_atividade", atividadeSel, "padrao") : null;
+    var camposMostrados = atividadeSel
+      ? CAMPOS_CONFIGURAVEIS.filter(function(c){ return (CAMPOS_POR_FORMULARIO[formularioSel]||[]).indexOf(c) !== -1; })
+      : CAMPOS_CONFIGURAVEIS;
+    return { atividadeSel: atividadeSel, prefixoChave: prefixoChave, camposMostrados: camposMostrados };
+  }
+
   function renderTelaConfiguracoes(){
     if (!App.cadastrosCarregados || !App.regrasCarregadas){
       return '<div class="spinner-wrap"><div class="spinner"></div></div>';
@@ -1111,18 +1286,21 @@
     if (!clientes.length){
       html += '<div class="empty-state">Cadastre ao menos um cliente antes de configurar isso.</div>';
     } else {
-      var atividadeSel = App.configAtividadeSelecionada;
-      var prefixoChave = atividadeSel ? (atividadeSel+":") : "";
-      var formularioSel = atividadeSel ? valorRegra("formulario_atividade", atividadeSel, "padrao") : null;
-      var camposMostrados = atividadeSel
-        ? CAMPOS_CONFIGURAVEIS.filter(function(c){ return (CAMPOS_POR_FORMULARIO[formularioSel]||[]).indexOf(c) !== -1; })
-        : CAMPOS_CONFIGURAVEIS;
+      var ctx = configContextoAtual();
+      var prefixoChave = ctx.prefixoChave;
+      var camposMostrados = ctx.camposMostrados;
 
       if (!camposMostrados.length){
         html += '<div class="empty-state">Essa atividade não tem campo configurável (formulário sem campos opcionais).</div>';
       } else {
         html += '<div class="tabela-wrap tabela-matriz-scroll"><table class="tabela-matriz"><thead><tr><th>Campo</th>'+
-          clientes.map(function(c){ return '<th>'+esc(c.valor)+'</th>'; }).join("")+
+          clientes.map(function(c){
+            return '<th><div class="th-cliente">'+esc(c.valor)+'</div>'+
+              '<div class="th-acoes-coluna">'+
+                '<button class="btn-coluna" data-cliente="'+esc(c.valor)+'" data-marcar="true">Marcar todos</button>'+
+                '<button class="btn-coluna" data-cliente="'+esc(c.valor)+'" data-marcar="false">Desmarcar todos</button>'+
+              '</div></th>';
+          }).join("")+
           '</tr></thead><tbody>'+
           camposMostrados.map(function(campo){
             return '<tr><td>'+esc(campo)+'</td>'+
@@ -1156,6 +1334,20 @@
       chk.onchange = function(){
         salvarRegra("campo_obrigatorio", chk.getAttribute("data-chave"), chk.checked).then(function(ok){
           if (ok) showToast("Configuração salva.");
+        });
+      };
+    });
+    document.querySelectorAll(".btn-coluna").forEach(function(btn){
+      btn.onclick = function(){
+        var cliente = btn.getAttribute("data-cliente");
+        var marcar = btn.getAttribute("data-marcar") === "true";
+        var ctx = configContextoAtual();
+        var chaves = ctx.camposMostrados.map(function(campo){ return cliente+":"+ctx.prefixoChave+campo; });
+        if (!chaves.length) return;
+        Promise.all(chaves.map(function(chave){ return salvarRegraSilenciosa("campo_obrigatorio", chave, marcar); })).then(function(resultados){
+          var ok = resultados.filter(Boolean).length;
+          carregarRegrasAdmin();
+          showToast(ok+" de "+chaves.length+" campo(s) atualizados para "+cliente+".");
         });
       };
     });
