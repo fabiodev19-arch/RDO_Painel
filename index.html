@@ -492,14 +492,31 @@
   // checagem ativa ao abrir/sincronizar, então a notificação é um reforço,
   // não a única forma de saber.
   function dispararPushDevolucao(usuarioId, motivo){
-    fetch(SUPABASE_URL + "/functions/v1/enviar-push", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + SUPABASE_ANON_KEY },
-      body: JSON.stringify({
-        usuario_id: usuarioId,
-        titulo: "Apontamento devolvido",
-        corpo: motivo
-      })
+    // O token precisa ser o da sessão de quem está logado, não a chave anon:
+    // a Edge Function chama getUser() no que recebe, e a anon é um JWT sem
+    // usuário nenhum por trás -- com ela a resposta é 401 e a notificação
+    // some sem deixar rastro (fetch não rejeita em 401, então nem o catch
+    // abaixo dispararia).
+    supabaseClient.auth.getSession().then(function(resp){
+      var sessao = resp && resp.data && resp.data.session;
+      if (!sessao) return;
+      return fetch(SUPABASE_URL + "/functions/v1/enviar-push", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_ANON_KEY,
+          "Authorization": "Bearer " + sessao.access_token
+        },
+        body: JSON.stringify({
+          usuario_id: usuarioId,
+          titulo: "Apontamento devolvido",
+          corpo: motivo
+        })
+      }).then(function(r){
+        // Sem isto, uma falha de envio é invisível: a devolução aparece como
+        // sucesso na tela e ninguém descobre que a notificação não saiu.
+        if (!r.ok) console.warn("push não enviado -- HTTP " + r.status);
+      });
     }).catch(function(){ /* melhor esforço -- devolução já foi salva de qualquer forma */ });
   }
 
