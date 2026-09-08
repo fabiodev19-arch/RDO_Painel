@@ -5,16 +5,22 @@
 // assinar e enviar a notificação push de verdade pro navegador do usuário.
 // O painel chama isso via fetch() depois de devolver uma atividade.
 //
-// Implantação (rode no terminal, com o Supabase CLI já instalado):
-//   npx supabase functions deploy enviar-push
-//   npx supabase secrets set VAPID_PUBLIC_KEY="..."
-//   npx supabase secrets set VAPID_PRIVATE_KEY="..."
+// Implantação -- rode a partir de Painel/. Não precisa de Deno nem de Docker
+// instalados: o CLI via npx traz o runtime (o aviso "Docker is not running" no
+// deploy é inofensivo, Docker só serve pra rodar a função localmente).
+//
+//   npx supabase login                       # uma vez, abre o navegador
+//   npx supabase secrets set --env-file supabase/.env
+//   npx supabase functions deploy enviar-push --project-ref ogmovdwcoxfoemutqugk
+//
+// Os secrets vão por --env-file, e não na linha de comando, pra chave privada
+// não ficar no histórico do shell nem na lista de processos. O supabase/.env é
+// ignorado pelo git; o modelo sem valores está em supabase/.env.example.
 //
 // As chaves NÃO ficam escritas aqui de propósito: este arquivo mora em
 // repositório público. Os valores estão em SEGREDOS_LOCAIS.md, na raiz do
-// workspace, com os comandos prontos pra copiar. O par foi trocado em
-// 2026-09-07 -- se você tem um comando antigo salvo em algum lugar com as
-// chaves escritas, ele está desatualizado, não use.
+// workspace. O par foi trocado em 2026-09-07 -- se você tem um comando antigo
+// salvo em algum lugar com as chaves escritas, ele está desatualizado.
 //
 // SUPABASE_URL, SUPABASE_ANON_KEY e SUPABASE_SERVICE_ROLE_KEY já ficam
 // disponíveis automaticamente pra toda Edge Function, não precisa configurar.
@@ -40,9 +46,56 @@ interface CorpoRequisicao {
   corpo?: string;
 }
 
+// ---------------------------------------------------------------------------
+// CORS -- sem isto a função é inalcançável a partir do painel.
+// ---------------------------------------------------------------------------
+// O painel roda em github.io e chama supabase.co: origem diferente. Como a
+// requisição leva Authorization e Content-Type, o navegador manda antes um
+// preflight OPTIONS. A primeira versão desta função respondia 405 a ele (só
+// aceitava POST), e o navegador abortava o POST antes de enviá-lo.
+//
+// O efeito era enganoso: no painel a devolução salvava normalmente e o toast
+// dizia sucesso -- só a notificação sumia. E `curl` não reproduz o problema,
+// porque preflight é coisa de navegador. Só apareceu ao ler os logs da função
+// e ver um OPTIONS 405 no lugar do POST esperado (2026-09-08).
+//
+// A origem é conferida contra uma lista, em vez de devolver "*", porque com
+// credencial no header o certo é dizer exatamente quem pode chamar. Origem
+// desconhecida não recebe cabeçalho de permissão e o navegador barra.
+const ORIGENS_PERMITIDAS = [
+  "https://fabiodev19-arch.github.io",
+];
+
+function cabecalhosCors(req: Request): Record<string, string> {
+  const origem = req.headers.get("Origin") ?? "";
+  const permitida = ORIGENS_PERMITIDAS.includes(origem);
+  return {
+    "Access-Control-Allow-Origin": permitida ? origem : ORIGENS_PERMITIDAS[0],
+    // apikey e authorization são os que o supabase-js/painel envia; sem eles
+    // declarados aqui o preflight falha mesmo respondendo 204.
+    "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin",
+  };
+}
+
+function responder(req: Request, corpo: unknown, status: number): Response {
+  return new Response(JSON.stringify(corpo), {
+    status,
+    headers: { ...cabecalhosCors(req), "Content-Type": "application/json" },
+  });
+}
+
 Deno.serve(async (req: Request) => {
+  // O preflight tem que ser respondido ANTES da checagem de método, senão cai
+  // no 405 e a chamada real nunca acontece.
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: cabecalhosCors(req) });
+  }
+
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Método não permitido." }), { status: 405 });
+    return responder(req, { error: "Método não permitido." }, 405);
   }
 
   // Exige chamador autenticado (não anon) -- mesma trava usada nas RPCs do
@@ -50,7 +103,7 @@ Deno.serve(async (req: Request) => {
   const authHeader = req.headers.get("Authorization") || "";
   const jwt = authHeader.replace("Bearer ", "");
   if (!jwt) {
-    return new Response(JSON.stringify({ error: "Não autorizado." }), { status: 401 });
+    return responder(req, { error: "Não autorizado." }, 401);
   }
 
   const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -58,19 +111,19 @@ Deno.serve(async (req: Request) => {
   });
   const { data: userData, error: userError } = await supabaseAuth.auth.getUser(jwt);
   if (userError || !userData?.user) {
-    return new Response(JSON.stringify({ error: "Sessão inválida." }), { status: 401 });
+    return responder(req, { error: "Sessão inválida." }, 401);
   }
 
   let body: CorpoRequisicao;
   try {
     body = await req.json();
   } catch {
-    return new Response(JSON.stringify({ error: "Corpo da requisição inválido." }), { status: 400 });
+    return responder(req, { error: "Corpo da requisição inválido." }, 400);
   }
 
   const usuarioId = body.usuario_id;
   if (!usuarioId) {
-    return new Response(JSON.stringify({ error: "usuario_id é obrigatório." }), { status: 400 });
+    return responder(req, { error: "usuario_id é obrigatório." }, 400);
   }
 
   // Usa a chave de serviço aqui (não a anon) pra poder ler push_subscriptions
@@ -84,13 +137,13 @@ Deno.serve(async (req: Request) => {
     .eq("usuario_id", usuarioId);
 
   if (dbError) {
-    return new Response(JSON.stringify({ error: dbError.message }), { status: 500 });
+    return responder(req, { error: dbError.message }, 500);
   }
   if (!inscricoes || inscricoes.length === 0) {
     // Não é erro -- a pessoa pode nunca ter aceitado notificações no
     // aparelho dela. A devolução já foi salva no banco de qualquer jeito;
     // ela também vai ver isso na checagem ativa ao abrir o PWA.
-    return new Response(JSON.stringify({ enviados: 0, motivo: "usuário sem inscrição de push" }), { status: 200 });
+    return responder(req, { enviados: 0, motivo: "usuário sem inscrição de push" }, 200);
   }
 
   let enviados = 0;
@@ -105,9 +158,19 @@ Deno.serve(async (req: Request) => {
         );
         enviados++;
       } catch (err) {
+        // Sem este log, uma falha de envio é invisível: a função responde 200
+        // com enviados=0 e não há como saber se foi chave VAPID errada, se o
+        // servidor de push recusou, ou se a inscrição morreu. Vai pro log da
+        // função, não pra resposta -- o painel não precisa desse detalhe, mas
+        // quem for investigar precisa.
+        const status = (err as { statusCode?: number })?.statusCode;
+        const corpoErro = (err as { body?: string })?.body ?? String(err);
+        console.error(
+          `falha ao enviar push: status=${status ?? "?"} endpoint=${sub.endpoint.slice(0, 60)} detalhe=${corpoErro}`
+        );
+
         // 404/410 = inscrição morta (desinstalou o app, trocou de aparelho
         // sem gerar uma nova, etc.) -- limpa pra não tentar de novo à toa.
-        const status = (err as { statusCode?: number })?.statusCode;
         if (status === 404 || status === 410) {
           idsParaRemover.push(sub.id);
         }
@@ -119,8 +182,8 @@ Deno.serve(async (req: Request) => {
     await supabaseAdmin.from("push_subscriptions").delete().in("id", idsParaRemover);
   }
 
-  return new Response(
-    JSON.stringify({ enviados, total: inscricoes.length }),
-    { status: 200, headers: { "Content-Type": "application/json" } }
-  );
+  // Esta é a resposta que o painel lê -- sem os cabeçalhos CORS o navegador
+  // bloqueia a leitura mesmo com o envio tendo dado certo.
+  console.log(`push: enviados=${enviados} de ${inscricoes.length} inscrição(ões)`);
+  return responder(req, { enviados, total: inscricoes.length }, 200);
 });
