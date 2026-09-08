@@ -468,13 +468,66 @@
     App.tela = "dashboard";
     render();
     carregarRelatorios();
+    ligarAvisoDeSincronizacao();
   }
 
   function sair(){
+    desligarAvisoDeSincronizacao();
     supabaseClient.auth.signOut().then(function(){
       App.tela = "login"; App.erroAuth = ""; App.relatorios = [];
       render();
     });
+  }
+
+  /* ======================= AVISO EM TEMPO REAL =======================
+     O banco emite um recado por gatilho quando o campo sincroniza um RDO
+     (aviso_realtime_painel.sql), e aqui o painel escuta esse recado para
+     recarregar sozinho -- sem isso o revisor fica no escuro até apertar
+     atualizar.
+
+     É Broadcast e não Postgres Changes de propósito: Postgres Changes entrega
+     as linhas que o usuário poderia ler direto da tabela, e neste projeto
+     nenhuma tabela tem policy de leitura (o acesso é todo por SECURITY
+     DEFINER). Usar Postgres Changes exigiria abrir as tabelas.
+
+     O recado vem SEM dado de negócio -- só "sincronizou". Quem busca os dados
+     é a RPC de sempre, que exige 2FA. Isso importa porque `authenticated`
+     neste projeto inclui usuários de outros apps que dividem este Supabase.  */
+  var _canalAviso = null;
+  var _ultimoAvisoEm = 0;
+
+  function ligarAvisoDeSincronizacao(){
+    if (!supabaseClient || _canalAviso) return;
+    // setAuth é obrigatório em canal privado: é o que manda o token da sessão
+    // para o Realtime avaliar a policy de realtime.messages.
+    var pronto = supabaseClient.realtime && supabaseClient.realtime.setAuth
+      ? supabaseClient.realtime.setAuth()
+      : null;
+    Promise.resolve(pronto).then(function(){
+      _canalAviso = supabaseClient
+        .channel("rdo-painel", { config: { private: true } })
+        .on("broadcast", { event: "sincronizou" }, function(){
+          // Debounce: um operador pode sincronizar vários RDOs em sequência ao
+          // recuperar sinal, e cada um gera um recado. Sem isso o painel
+          // recarregaria em rajada.
+          var agora = Date.now();
+          if (agora - _ultimoAvisoEm < 3000) return;
+          _ultimoAvisoEm = agora;
+          showToast("Chegou relatório novo do campo. Atualizando...");
+          carregarRelatorios();
+        })
+        .subscribe();
+    }).catch(function(){
+      // Falhar aqui não pode atrapalhar o painel: o botão Atualizar continua
+      // funcionando, e o aviso é conveniência.
+    });
+  }
+
+  function desligarAvisoDeSincronizacao(){
+    if (_canalAviso && supabaseClient){
+      supabaseClient.removeChannel(_canalAviso);
+      _canalAviso = null;
+    }
   }
 
   /* ======================= DADOS ======================= */
@@ -789,6 +842,13 @@
         opcoesDistintas(App.relatorios,"fazenda").map(function(f){ return '<option value="'+esc(f)+'"'+(App.filtros.fazenda===f?" selected":"")+'>'+esc(f)+'</option>'; }).join("")+
       '</select></div>'+
       '<button class="btn btn-secondary btn-sm" id="btn-filtrar">Filtrar</button>'+
+      // Atualizar na mão, ao lado de Filtrar. Não conflita com o aviso
+      // automático -- os dois chamam a mesma carregarRelatorios(). Serve para
+      // quando o revisor quer conferir agora, e como saída se o Realtime
+      // estiver fora do ar ou o navegador tiver suspendido a aba.
+      '<button class="btn btn-secondary btn-sm" id="btn-atualizar" title="Buscar agora o que chegou do campo">'+
+        (App.carregandoRelatorios ? "Atualizando..." : "Atualizar")+
+      '</button>'+
     '</div>';
 
     // Mapa das frentes (GPS dos relatórios)
@@ -873,6 +933,11 @@
       App.filtros.dataFim = document.getElementById("f-data-fim").value;
       App.filtros.cliente = document.getElementById("f-cliente").value;
       App.filtros.fazenda = document.getElementById("f-fazenda").value;
+      carregarRelatorios();
+    };
+    var btnAtualizar = document.getElementById("btn-atualizar");
+    if (btnAtualizar) btnAtualizar.onclick = function(){
+      if (App.carregandoRelatorios) return;   // já está buscando: não empilha
       carregarRelatorios();
     };
   }
