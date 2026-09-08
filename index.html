@@ -219,9 +219,13 @@
     padding:5px 12px; border-radius:var(--radius-sm); border:1px solid var(--border);
     background:var(--surface); color:var(--text); font-size:12px; font-weight:600; cursor:pointer;
   }
-  .btn-tabela:hover{background:var(--surface-3);}
+  /* :not(:disabled) nos hovers -- sem isso o botão travado continua reagindo
+     ao mouse e parecendo clicável, que é justamente o convite ao clique que
+     estamos tentando tirar. */
+  .btn-tabela:not(:disabled):hover{background:var(--surface-3);}
+  .btn-tabela:disabled{opacity:.55; cursor:default; color:var(--text-dim);}
   .btn-tabela.perigo{border-color:var(--danger); color:var(--danger);}
-  .btn-tabela.perigo:hover{background:var(--danger-bg);}
+  .btn-tabela.perigo:not(:disabled):hover{background:var(--danger-bg);}
   .celula-acoes-icone{display:flex; gap:8px; align-items:center; white-space:nowrap;}
   .acao-icone{background:none; border:none; padding:2px; cursor:pointer; color:var(--text-dim);}
   .acao-icone svg{width:16px; height:16px;}
@@ -1003,7 +1007,13 @@
         (removida ? '' :
           '<div class="ativ-acoes-revisao">'+
             '<button class="btn-tabela" data-id="'+a.id+'" data-action="validar-atividade">Validar</button>'+
-            '<button class="btn-tabela perigo" data-id="'+a.id+'" data-action="devolver-atividade">Devolver</button>'+
+            // Já devolvida: a vez é do campo. Devolver de novo antes de o
+            // encarregado reenviar não muda nada no estado -- só dispara outra
+            // notificação para ele sobre o mesmo pedido. O servidor recusa
+            // (devolver_atividade_rdo), e aqui o botão nem convida ao clique.
+            (status === "devolvido"
+              ? '<button class="btn-tabela" disabled title="Aguardando o encarregado corrigir e reenviar pelo aplicativo.">Aguardando correção</button>'
+              : '<button class="btn-tabela perigo" data-id="'+a.id+'" data-action="devolver-atividade">Devolver</button>')+
           '</div>')+
       '</div>';
     }).join("");
@@ -1034,7 +1044,15 @@
           "Devolver",
           function(motivo){
             supabaseClient.rpc("devolver_atividade_rdo", { p_atividade_id: id, p_motivo: motivo }).then(function(resp){
-              if (resp.error){ showToast("Erro: " + resp.error.message); return; }
+              if (resp.error){
+                showToast(resp.error.message || "Não foi possível devolver a atividade.");
+                // Recarrega mesmo no erro: a recusa mais provável é o painel
+                // estar defasado (outra pessoa já devolveu, ou o campo acabou
+                // de reenviar). Sem isso a tela continua mostrando o botão
+                // errado e o revisor tenta de novo.
+                carregarRelatorios();
+                return;
+              }
               showToast("Atividade devolvida.");
               var usuarioId = resp.data && resp.data.usuario_id;
               if (usuarioId) dispararPushDevolucao(usuarioId, motivo);
