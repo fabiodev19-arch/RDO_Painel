@@ -187,6 +187,13 @@
   .lista-inline{font-size:13px; color:var(--text); margin:0;}
   .fotos-grid{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
   .fotos-grid img{width:84px; height:84px; object-fit:cover; border-radius:9px; border:1px solid var(--border); cursor:pointer;}
+  /* Ocupa o mesmo espaço da miniatura: o revisor vê que existe uma foto ali e
+     que ela não carregou, em vez de um vazio que parece "sem evidência". */
+  .fotos-grid .foto-indisponivel{
+    width:84px; height:84px; border-radius:9px; border:1px dashed var(--border);
+    display:flex; align-items:center; justify-content:center; text-align:center;
+    font-size:10.5px; color:var(--text-dim); padding:4px; box-sizing:border-box;
+  }
   .badge{font-size:11px; font-weight:600; padding:4px 10px; border-radius:20px;}
   .badge.sincronizado{background:var(--success-bg); color:var(--success);}
 
@@ -404,8 +411,58 @@
   function configNavIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>'; }
 
   /* ======================= AUTENTICAÇÃO ======================= */
-  function urlFotoPublica(path){
-    return SUPABASE_URL + "/storage/v1/object/public/" + BUCKET_EVIDENCIAS + "/" + path;
+  /* ======================= FOTOS DE EVIDÊNCIA =======================
+     As fotos deixaram de ser servidas por URL pública. Antes, qualquer pessoa
+     com o link baixava a evidência sem login nenhum -- verificado em 08/09 com
+     um curl sem credencial: HTTP 200. O caminho tem três UUIDs e não é
+     adivinhável, mas link encaminhado, print ou histórico de navegador davam
+     acesso permanente àquela foto.
+
+     Agora o painel pede uma URL assinada, que só existe para quem já está
+     autenticado e expira sozinha. Como as fotos aparecem apenas na tela de
+     detalhe, as assinaturas são geradas por relatório aberto -- não para os
+     200 da lista.                                                          */
+
+  // 1 hora: tempo de sobra para o revisor analisar um RDO sem que o link
+  // caduque na mão dele, e curto o bastante para um link vazado não valer
+  // muito. Ao recarregar a tela, novas assinaturas são geradas.
+  var FOTO_URL_VALIDADE_S = 3600;
+
+  // path -> url assinada. Vive só na memória da aba.
+  var _urlsFotos = {};
+
+  function relatorioAtual(){
+    return App.relatorios.filter(function(x){ return x.id === App.relatorioAtualId; })[0];
+  }
+
+  function urlFotoAssinada(path){
+    return _urlsFotos[path] || "";
+  }
+
+  // Gera as assinaturas das fotos de UM relatório e chama de volta. Em lote:
+  // uma requisição para todas as fotos, em vez de uma por imagem.
+  function prepararFotosDoRelatorio(rel, aoTerminar){
+    var caminhos = [];
+    (rel.atividades || []).forEach(function(a){
+      (a.fotos || []).forEach(function(f){
+        if (f.storage_path && !_urlsFotos[f.storage_path]) caminhos.push(f.storage_path);
+      });
+    });
+    if (!caminhos.length){ if (aoTerminar) aoTerminar(); return; }
+
+    supabaseClient.storage.from(BUCKET_EVIDENCIAS)
+      .createSignedUrls(caminhos, FOTO_URL_VALIDADE_S)
+      .then(function(resp){
+        (resp && resp.data ? resp.data : []).forEach(function(item){
+          if (item && item.signedUrl && item.path) _urlsFotos[item.path] = item.signedUrl;
+        });
+        if (aoTerminar) aoTerminar();
+      })
+      .catch(function(){
+        // Sem assinatura a foto não aparece, mas o resto do relatório sim --
+        // os números do apontamento são o que sustenta a revisão.
+        if (aoTerminar) aoTerminar();
+      });
   }
 
   function fazerLogin(email, senha){
@@ -912,7 +969,11 @@
         esc(r.cliente||"—")+" &middot; "+formatarData(r.data_relatorio)+"<br>"+
         (r.atividades||[]).length+" atividade(s)"
       );
-      marker.on("click", function(){ App.relatorioAtualId = r.id; App.tela = "detalhe"; render(); });
+      marker.on("click", function(){
+        App.relatorioAtualId = r.id; App.tela = "detalhe"; render();
+        var rel = relatorioAtual();
+        if (rel) prepararFotosDoRelatorio(rel, render);   // mesmo caminho do clique na tabela
+      });
       marker.addTo(_leafletMap);
       pontos.push([r.gps_lat, r.gps_lng]);
     });
@@ -925,7 +986,17 @@
   function ligarDashboard(){
     renderMapaFrentes();
     document.querySelectorAll("tbody tr[data-id]").forEach(function(tr){
-      tr.onclick = function(){ App.relatorioAtualId = tr.getAttribute("data-id"); App.tela = "detalhe"; render(); };
+      tr.onclick = function(){
+        App.relatorioAtualId = tr.getAttribute("data-id");
+        App.tela = "detalhe";
+        render();
+        // As URLs assinadas das fotos são pedidas depois de a tela já estar
+        // montada: o revisor vê os dados do apontamento na hora, e as imagens
+        // entram quando as assinaturas chegam. Esperar pela rede antes de
+        // desenhar deixaria a tela em branco à toa.
+        var rel = relatorioAtual();
+        if (rel) prepararFotosDoRelatorio(rel, render);
+      };
     });
     var btnFiltrar = document.getElementById("btn-filtrar");
     if (btnFiltrar) btnFiltrar.onclick = function(){
@@ -1034,7 +1105,11 @@
 
     html += ativs.map(function(a){
       var fotos = (a.fotos||[]).map(function(f){
-        return '<img src="'+urlFotoPublica(f.storage_path)+'" data-full="'+urlFotoPublica(f.storage_path)+'">';
+        var u = urlFotoAssinada(f.storage_path);
+        // Sem assinatura ainda (ou falhou): mostra o espaço com aviso em vez
+        // de uma imagem quebrada sem explicação.
+        if (!u) return '<div class="foto-indisponivel" title="'+escAttr(f.storage_path)+'">foto indisponível</div>';
+        return '<img src="'+escAttr(u)+'" data-full="'+escAttr(u)+'">';
       }).join("");
       var status   = a.status_revisao || "pendente";
       var removida = !!a.excluido_em;
