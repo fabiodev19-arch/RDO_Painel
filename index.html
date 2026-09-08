@@ -170,6 +170,15 @@
   .badge-revisao.pendente{background:var(--surface-3); color:var(--text-dim);}
   .badge-revisao.validado{background:var(--success-bg); color:var(--success);}
   .badge-revisao.devolvido{background:var(--danger-bg); color:var(--danger);}
+  .badge-revisao.removido{background:var(--surface-3); color:var(--text-dim); text-decoration:line-through;}
+  /* Borda tracejada e opacidade: a atividade removida tem que ser lida como
+     "isto não está mais no aparelho" antes de qualquer texto ser lido. */
+  .ativ-detalhe.removida{opacity:.72; border-style:dashed;}
+  .ativ-detalhe.removida .tipo{text-decoration:line-through;}
+  .ativ-aviso-remocao{
+    font-size:12.5px; color:var(--text-dim); background:var(--surface-3); border-radius:var(--radius-sm);
+    padding:8px 10px; margin-top:10px;
+  }
   .ativ-motivo-devolucao{
     font-size:12.5px; color:var(--danger); background:var(--danger-bg); border-radius:var(--radius-sm);
     padding:8px 10px; margin-top:10px;
@@ -944,24 +953,58 @@
         '<a href="https://www.google.com/maps?q='+r.gps_lat+','+r.gps_lng+'" target="_blank" rel="noopener" style="color:var(--brand);">Ver no mapa</a></div></div>';
     }
 
-    html += '<div class="section-title">Atividades ('+(r.atividades||[]).length+')</div>';
-    html += (r.atividades||[]).map(function(a){
+    // As removidas continuam vindo do banco de propósito (é o ponto da
+    // marcação), mas contá-las junto com as vivas daria um total que não bate
+    // com o que o operador tem na mão. Então o título separa as duas coisas.
+    var ativs      = r.atividades || [];
+    var qtdVivas   = ativs.filter(function(a){ return !a.excluido_em; }).length;
+    var qtdRemovidas = ativs.length - qtdVivas;
+    html += '<div class="section-title">Atividades ('+qtdVivas+
+      (qtdRemovidas ? ' + '+qtdRemovidas+' removida'+(qtdRemovidas > 1 ? 's' : '')+' pelo operador' : '')+
+      ')</div>';
+
+    html += ativs.map(function(a){
       var fotos = (a.fotos||[]).map(function(f){
         return '<img src="'+urlFotoPublica(f.storage_path)+'" data-full="'+urlFotoPublica(f.storage_path)+'">';
       }).join("");
-      var status = a.status_revisao || "pendente";
-      var badge = status === "validado" ? '<span class="badge-revisao validado">Validado</span>'
+      var status   = a.status_revisao || "pendente";
+      var removida = !!a.excluido_em;
+
+      // Numa atividade removida o badge de revisão informa o que ela ERA --
+      // status_anterior_exclusao vem do banco justamente pra isso. Mostrar
+      // "Pendente" numa linha que não existe mais no aparelho seria mentira.
+      var badge = removida ? '<span class="badge-revisao removido">Removida no aparelho</span>'
+        : status === "validado" ? '<span class="badge-revisao validado">Validado</span>'
         : status === "devolvido" ? '<span class="badge-revisao devolvido">Devolvido</span>'
         : '<span class="badge-revisao pendente">Pendente de revisão</span>';
-      return '<div class="ativ-detalhe" data-atividade-id="'+a.id+'">'+
+
+      var avisoRemocao = "";
+      if (removida){
+        var antes = a.status_anterior_exclusao || status;
+        var comoEstava = antes === "validado" ? "já estava VALIDADA por você"
+          : antes === "devolvido" ? "estava DEVOLVIDA aguardando correção"
+          : "ainda não tinha sido revisada";
+        avisoRemocao = '<div class="ativ-aviso-remocao">'+
+          'O operador removeu este apontamento em '+esc(formatarDataHora(a.excluido_em))+'. '+
+          'Quando foi removida, '+comoEstava+'. '+
+          'Os dados e as fotos continuam guardados aqui.'+
+        '</div>';
+      }
+
+      return '<div class="ativ-detalhe'+(removida ? ' removida' : '')+'" data-atividade-id="'+a.id+'">'+
         '<div class="top"><span class="tipo">'+esc(a.tipo_atividade)+'</span>'+badge+'</div>'+
         renderResumoAtividade(a)+
         (fotos ? '<div class="fotos-grid">'+fotos+'</div>' : '')+
-        (status === "devolvido" && a.motivo_devolucao ? '<div class="ativ-motivo-devolucao">Motivo da devolução: '+esc(a.motivo_devolucao)+'</div>' : '')+
-        '<div class="ativ-acoes-revisao">'+
-          '<button class="btn-tabela" data-id="'+a.id+'" data-action="validar-atividade">Validar</button>'+
-          '<button class="btn-tabela perigo" data-id="'+a.id+'" data-action="devolver-atividade">Devolver</button>'+
-        '</div>'+
+        (!removida && status === "devolvido" && a.motivo_devolucao ? '<div class="ativ-motivo-devolucao">Motivo da devolução: '+esc(a.motivo_devolucao)+'</div>' : '')+
+        avisoRemocao+
+        // Sem botões nas removidas: validar ou devolver algo que não está mais
+        // no aparelho não leva a lugar nenhum -- o operador não veria. O banco
+        // não impede (as RPCs continuam aceitando), é a tela que não oferece.
+        (removida ? '' :
+          '<div class="ativ-acoes-revisao">'+
+            '<button class="btn-tabela" data-id="'+a.id+'" data-action="validar-atividade">Validar</button>'+
+            '<button class="btn-tabela perigo" data-id="'+a.id+'" data-action="devolver-atividade">Devolver</button>'+
+          '</div>')+
       '</div>';
     }).join("");
 
