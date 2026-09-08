@@ -1,0 +1,24 @@
+# Configuração do Supabase CLI — GTM RDO (Painel)
+#
+# Este arquivo existe para o deploy da Edge Function sair DAQUI, do repositório,
+# e não de conteúdo digitado na hora. É o que faz "o que está em produção" ter
+# um commit correspondente.
+#
+# Só tem o necessário para `functions deploy`. Não há seções de banco, storage
+# ou studio de propósito: o desenvolvimento local completo exigiria subir a
+# stack no Docker, e nada neste projeto depende disso — as migrações do RDO são
+# aplicadas direto no banco remoto.
+
+project_id = "ogmovdwcoxfoemutqugk"
+
+[functions.enviar-push]
+# true = o Supabase valida o JWT na borda, antes de a função executar.
+#
+# A função TAMBÉM valida por dentro (chama getUser no token recebido), e as
+# duas coisas se somam de propósito: a da borda barra tráfego anônimo sem
+# gastar execução, e a de dentro é quem confirma que o token é de um usuário
+# de verdade. O painel manda o access_token da sessão, então passa nas duas.
+#
+# Não troque para false. Foi exatamente esse tipo de porta aberta que a leva de
+# SQL de 08/09 fechou no banco.
+verify_jwt = true
