@@ -386,8 +386,10 @@
   var _chegadasAcumuladas = 0;
   var _tituloOriginal = document.title;
 
-  function mostrarAvisoChegada(){
-    _chegadasAcumuladas++;
+  // `quantos` vem do agrupamento da rajada: 4 RDOs sincronizados juntos são
+  // uma recarga só, mas o revisor precisa saber que foram 4.
+  function mostrarAvisoChegada(quantos){
+    _chegadasAcumuladas += (Number(quantos) > 0 ? Number(quantos) : 1);
     var el = document.getElementById("aviso-chegada");
     if (!el) return;
     var texto = _chegadasAcumuladas === 1
@@ -625,7 +627,8 @@
      é a RPC de sempre, que exige 2FA. Isso importa porque `authenticated`
      neste projeto inclui usuários de outros apps que dividem este Supabase.  */
   var _canalAviso = null;
-  var _ultimoAvisoEm = 0;
+  var _timerAviso = null;
+  var _avisosPendentes = 0;
 
   function ligarAvisoDeSincronizacao(){
     if (!supabaseClient || _canalAviso) return;
@@ -638,14 +641,27 @@
       _canalAviso = supabaseClient
         .channel("rdo-painel", { config: { private: true } })
         .on("broadcast", { event: "sincronizou" }, function(){
-          // Debounce: um operador pode sincronizar vários RDOs em sequência ao
-          // recuperar sinal, e cada um gera um recado. Sem isso o painel
-          // recarregaria em rajada.
-          var agora = Date.now();
-          if (agora - _ultimoAvisoEm < 3000) return;
-          _ultimoAvisoEm = agora;
-          mostrarAvisoChegada();
-          carregarRelatorios();
+          // Agrupa a rajada numa recarga só, mas NÃO descarta aviso.
+          //
+          // A primeira versão fazia `if (agora - ultimo < 3000) return;` --
+          // e isso jogava fora o aviso E o carregarRelatorios() junto. O
+          // cenário que quebrava é o mais comum: o operador recupera sinal e o
+          // app sobe os RDOs pendentes em sequência. O primeiro aviso
+          // recarregava a lista, mas os outros ainda estavam subindo naquele
+          // instante -- e seus avisos eram descartados. O revisor ficava com
+          // uma lista incompleta achando que estava completa.
+          //
+          // Agora cada aviso conta, e a recarga é adiada até a rajada acabar:
+          // uma requisição só, com tudo que chegou.
+          _avisosPendentes++;
+          if (_timerAviso) return;   // já há recarga agendada; só somou ao contador
+          _timerAviso = setTimeout(function(){
+            _timerAviso = null;
+            var quantos = _avisosPendentes;
+            _avisosPendentes = 0;
+            mostrarAvisoChegada(quantos);
+            carregarRelatorios();
+          }, 1500);
         })
         .subscribe();
     }).catch(function(){
@@ -688,7 +704,9 @@
   // foi salva no banco de qualquer forma -- o PWA também vê isso na
   // checagem ativa ao abrir/sincronizar, então a notificação é um reforço,
   // não a única forma de saber.
-  function dispararPushDevolucao(usuarioId, motivo){
+  //  identifica o apontamento na notificação: com ele, devolver #12
+  // e #13 gera dois avisos no aparelho em vez de um substituir o outro.
+  function dispararPushDevolucao(usuarioId, motivo, numero){
     // O token precisa ser o da sessão de quem está logado, não a chave anon:
     // a Edge Function chama getUser() no que recebe, e a anon é um JWT sem
     // usuário nenhum por trás -- com ela a resposta é 401 e a notificação
@@ -706,8 +724,12 @@
         },
         body: JSON.stringify({
           usuario_id: usuarioId,
-          titulo: "Apontamento devolvido",
-          corpo: motivo
+          titulo: numero != null ? ("Apontamento #" + numero + " devolvido") : "Apontamento devolvido",
+          corpo: motivo,
+          // Vira a tag da notificação no aparelho. Sem ela, todas usariam a
+          // mesma e cada devolução apagaria a anterior -- o operador veria só
+          // a última de uma leva.
+          referencia: numero != null ? String(numero) : null
         })
       }).then(function(r){
         // Sem isto, uma falha de envio é invisível: a devolução aparece como
@@ -1254,6 +1276,15 @@
     document.querySelectorAll('[data-action="devolver-atividade"]').forEach(function(btn){
       btn.onclick = function(){
         var id = btn.getAttribute("data-id");
+        // Número do apontamento, para a notificação dizer QUAL foi devolvido e
+        // para uma devolução não apagar a notificação da anterior.
+        var ativNumero = null;
+        var relAtual = relatorioAtual();
+        if (relAtual){
+          (relAtual.atividades || []).forEach(function(x){
+            if (x.id === id && x.numero != null) ativNumero = x.numero;
+          });
+        }
         showPrompt(
           "Devolver essa atividade?",
           "Descreva o que precisa ser corrigido. Isso volta pro PWA de quem lançou, com notificação.",
@@ -1272,7 +1303,7 @@
               }
               showToast("Atividade devolvida.");
               var usuarioId = resp.data && resp.data.usuario_id;
-              if (usuarioId) dispararPushDevolucao(usuarioId, motivo);
+              if (usuarioId) dispararPushDevolucao(usuarioId, motivo, ativNumero);
               carregarRelatorios();
             });
           }

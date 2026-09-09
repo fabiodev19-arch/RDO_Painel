@@ -44,6 +44,11 @@ interface CorpoRequisicao {
   usuario_id?: string;
   titulo?: string;
   corpo?: string;
+  // Identifica o apontamento. Vira a `tag` da notificação no aparelho: com ela,
+  // devolver #12 e #13 gera dois avisos; sem ela, todas usariam a mesma tag e
+  // cada devolução apagaria a anterior -- o operador veria só a última de uma
+  // leva, o que é grave agora que cada aviso cita um número diferente.
+  referencia?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +218,11 @@ Deno.serve(async (req: Request) => {
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          JSON.stringify({ titulo: tituloFinal, corpo: body.corpo || "" })
+          JSON.stringify({
+            titulo: tituloFinal,
+            corpo: body.corpo || "",
+            referencia: body.referencia ?? null,
+          })
         );
         enviados++;
       } catch (err) {
