@@ -163,6 +163,15 @@
   .ativ-detalhe{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:12px;}
   .ativ-detalhe .top{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
   .ativ-detalhe .tipo{font-weight:700; font-size:14.5px;}
+  /* Mesma etiqueta do PWA, para o número ser reconhecível dos dois lados.
+     Monoespaçado porque a função dele é ser lido dígito a dígito. */
+  .ativ-num{
+    font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size:12px; font-weight:700; color:var(--brand);
+    background:var(--surface-3); border-radius:5px; padding:1px 6px;
+    margin-right:3px; white-space:nowrap;
+  }
+  html[data-theme="light"] .ativ-num{color:var(--brand-dark);}
   .ativ-detalhe .campos{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:10px;}
   .ativ-detalhe .campos .item label{font-size:10.5px; color:var(--text-dim); display:block;}
   .ativ-detalhe .campos .item .v{font-size:13.5px; font-weight:600;}
@@ -257,6 +266,28 @@
     opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:40;
   }
   .toast.show{opacity:1;}
+
+  /* Aviso de chegada do campo.
+     O toast comum aparece no rodapé, discreto, e some em 2,2s -- bom para
+     confirmar uma ação que o próprio usuário fez, ruim para avisar que chegou
+     trabalho novo enquanto ele olhava outra coisa. Este entra pelo topo, fica
+     até ser dispensado e ocupa a largura da tela. */
+  .aviso-chegada{
+    position:fixed; top:0; left:0; right:0; z-index:45;
+    display:flex; align-items:center; justify-content:center; gap:12px;
+    background:var(--brand); color:#fff;
+    padding:13px 18px; font-size:14px; font-weight:600;
+    box-shadow:var(--shadow);
+    transform:translateY(-100%); transition:transform .28s cubic-bezier(.2,.9,.3,1);
+  }
+  .aviso-chegada.show{transform:translateY(0);}
+  .aviso-chegada svg{width:18px; height:18px; flex:0 0 auto;}
+  .aviso-chegada .fechar{
+    background:rgba(255,255,255,.18); border:none; color:#fff; cursor:pointer;
+    border-radius:6px; padding:5px 11px; font-size:12.5px; font-weight:700;
+  }
+  .aviso-chegada .fechar:hover{background:rgba(255,255,255,.3);}
+  @media (prefers-reduced-motion: reduce){ .aviso-chegada{transition:none;} }
   .modal-overlay{
     position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center;
     padding:24px; opacity:0; pointer-events:none; transition:opacity .15s ease; z-index:30;
@@ -292,6 +323,7 @@
 <body>
 <div id="app"></div>
 <div id="modal-overlay" class="modal-overlay"><div class="modal-box" id="modal-box"></div></div>
+<div id="aviso-chegada" class="aviso-chegada"></div>
 <div id="toast" class="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -345,6 +377,46 @@
     clearTimeout(showToast._t);
     showToast._t = setTimeout(function(){ el.classList.remove("show"); }, 2200);
   }
+
+  /* ---- Aviso de que chegou relatório do campo -------------------------
+     Separado do toast de propósito: o toast confirma o que o usuário acabou
+     de fazer; este interrompe o que ele estava fazendo para dizer que chegou
+     trabalho novo. Fica até ser dispensado -- some sozinho seria o mesmo
+     problema de antes, só que mais bonito.                               */
+  var _chegadasAcumuladas = 0;
+  var _tituloOriginal = document.title;
+
+  function mostrarAvisoChegada(){
+    _chegadasAcumuladas++;
+    var el = document.getElementById("aviso-chegada");
+    if (!el) return;
+    var texto = _chegadasAcumuladas === 1
+      ? "Chegou relatório novo do campo — a lista foi atualizada."
+      : _chegadasAcumuladas + " relatórios novos chegaram do campo — a lista foi atualizada.";
+    el.innerHTML = sinoIcon()+'<span>'+esc(texto)+'</span>'+
+      '<button class="fechar" id="btn-fechar-aviso">Entendi</button>';
+    el.classList.add("show");
+    document.getElementById("btn-fechar-aviso").onclick = limparAvisoChegada;
+
+    // Aba em segundo plano: o revisor não está olhando a tela, então o aviso
+    // vai para onde ele consegue ver -- o título da aba.
+    if (document.hidden){
+      document.title = "(" + _chegadasAcumuladas + ") " + _tituloOriginal;
+    }
+  }
+
+  function limparAvisoChegada(){
+    _chegadasAcumuladas = 0;
+    var el = document.getElementById("aviso-chegada");
+    if (el) el.classList.remove("show");
+    document.title = _tituloOriginal;
+  }
+
+  // Voltou para a aba: o título deixa de piscar, mas o banner continua até ele
+  // dispensar -- ele ainda não leu o que chegou.
+  document.addEventListener("visibilitychange", function(){
+    if (!document.hidden) document.title = _tituloOriginal;
+  });
   function showModal(html){
     document.getElementById("modal-box").innerHTML = html;
     document.getElementById("modal-overlay").classList.add("show");
@@ -407,6 +479,8 @@
   function xIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6 6 18M6 6l12 12"/></svg>'; }
   function pinIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s7-6.6 7-12a7 7 0 1 0-14 0c0 5.4 7 12 7 12Z"/><circle cx="12" cy="9" r="2.4"/></svg>'; }
   function relatoriosNavIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h8l4 4v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v4h4M9 12h6M9 16h6M9 8h2"/></svg>'; }
+  // Sino do aviso de chegada. Mesmo traço dos outros ícones do painel.
+  function sinoIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>'; }
   function cadastrosNavIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5.5" rx="7" ry="2.5"/><path d="M5 5.5V12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V5.5M5 12v6.5c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V12"/></svg>'; }
   function configNavIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>'; }
 
@@ -570,7 +644,7 @@
           var agora = Date.now();
           if (agora - _ultimoAvisoEm < 3000) return;
           _ultimoAvisoEm = agora;
-          showToast("Chegou relatório novo do campo. Atualizando...");
+          mostrarAvisoChegada();
           carregarRelatorios();
         })
         .subscribe();
@@ -1135,8 +1209,11 @@
         '</div>';
       }
 
+      // O número é a referência que o revisor e o operador usam para falar do
+      // mesmo apontamento -- por telefone, no rádio ou num bilhete.
+      var num = a.numero != null ? '<span class="ativ-num">#'+esc(String(a.numero))+'</span> ' : '';
       return '<div class="ativ-detalhe'+(removida ? ' removida' : '')+'" data-atividade-id="'+a.id+'">'+
-        '<div class="top"><span class="tipo">'+esc(a.tipo_atividade)+'</span>'+badge+'</div>'+
+        '<div class="top"><span class="tipo">'+num+esc(a.tipo_atividade)+'</span>'+badge+'</div>'+
         renderResumoAtividade(a)+
         (fotos ? '<div class="fotos-grid">'+fotos+'</div>' : '')+
         (!removida && status === "devolvido" && a.motivo_devolucao ? '<div class="ativ-motivo-devolucao">Motivo da devolução: '+esc(a.motivo_devolucao)+'</div>' : '')+
