@@ -58,6 +58,11 @@
     font-size:12.5px; color:var(--text-dim); flex:1; min-width:0;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
+  /* Com os filtros nesta faixa, em tela estreita sobrava um subtítulo de 63px
+     -- cinco letras e reticências, que não explicam nada e ainda roubam espaço
+     de quem precisa: os campos de filtro. Some inteiro em vez de virar enfeite
+     ilegível; quem abre o painel numa tela dessas já sabe o que ele é. */
+  @media (max-width: 1200px){ .topo-sub{display:none;} }
   .topo-acoes{display:flex; align-items:center; gap:8px; flex-shrink:0;}
 
   .abas-linha{
@@ -77,12 +82,12 @@
   .abas-acoes{display:flex; align-items:center; gap:8px; flex-shrink:0;}
   .abas-atualizado{font-size:12px; color:var(--text-dim); white-space:nowrap;}
 
-  /* Filtros do servidor, na linha das abas.
-     São compactos de propósito: dividem a faixa com quatro abas, e uma faixa
-     que cresce empurra a tabela para baixo em toda tela. O rótulo fica ao lado
-     do campo (não acima) pela mesma razão -- rótulo em cima dobraria a altura
-     da linha inteira só para as duas datas. */
-  .topo-filtros{display:flex; align-items:center; gap:7px; flex-shrink:0; padding:6px 0;}
+  /* Filtros do servidor, na linha do título (é onde a referência os põe).
+     São compactos de propósito: dividem a faixa com a marca e o subtítulo, e
+     uma faixa que cresce empurra o conteúdo para baixo em toda tela. O rótulo
+     fica ao lado do campo (não acima) pela mesma razão -- rótulo em cima
+     dobraria a altura da linha inteira só para as duas datas. */
+  .topo-filtros{display:flex; align-items:center; gap:7px; flex-shrink:0;}
   .filtro-inline{display:flex; align-items:center; gap:5px;}
   .filtro-inline > span{font-size:11.5px; font-weight:600; color:var(--text-dim);}
   /* 7px de padding, e não 5px: é o que iguala campo e botão aos 32px do
@@ -1091,11 +1096,7 @@
         '<div class="topo-marca"><img src="'+LOGO+'" alt="GTM"><h1>Painel RDO — GTM</h1></div>'+
         '<span class="topo-sub">Revisão dos apontamentos lançados em campo: conferir medições, validar o que está correto e devolver para correção o que não está.</span>'+
         '<div class="topo-acoes">'+
-          '<span class="abas-atualizado">'+esc(horaAtualizacao())+'</span>'+
-          '<button class="btn-sair" id="btn-atualizar" title="Buscar agora o que chegou do campo">'+
-            (App.carregandoRelatorios ? "Atualizando..." : "Atualizar")+
-          '</button>'+
-          '<button class="btn-sair" id="btn-sair">Sair</button>'+
+          renderFiltrosGlobais()+
           '<button class="icon-btn" id="btn-tema" title="Alternar tema">'+(temaAtual()==="dark"?sunIcon():moonIcon())+'</button>'+
         '</div>'+
       '</div>'+
@@ -1103,23 +1104,31 @@
         '<nav class="abas">'+abas.map(function(a){
           return '<button data-aba="'+a.id+'" class="'+(telaAba===a.id?"active":"")+'">'+a.icon+'<span>'+esc(a.label)+'</span></button>';
         }).join("")+'</nav>'+
-        renderFiltrosGlobais()+
+        '<div class="abas-acoes">'+
+          '<span class="abas-atualizado">'+esc(horaAtualizacao())+'</span>'+
+          '<button class="btn-sair" id="btn-atualizar" title="Buscar agora o que chegou do campo">'+
+            (App.carregandoRelatorios ? "Atualizando..." : "Atualizar")+
+          '</button>'+
+          '<button class="btn-sair" id="btn-sair">Sair</button>'+
+        '</div>'+
       '</div>'+
     '</header>';
   }
 
   // Os filtros que definem o que o painel carregou do servidor.
   //
-  // Ficam na linha das abas (pedido do Fábio, 09/09) e não dentro de uma tela,
-  // porque é isso que eles são: os quatro viram parâmetro de
-  // listar_relatorios_painel, então valem para o Dashboard e para o Histórico
-  // de apontamentos ao mesmo tempo -- as duas telas leem a mesma
-  // App.relatorios. Antes, mudar o período no Dashboard mudava calado o que o
-  // Histórico mostrava, sem nada na tela do Histórico explicando por quê.
+  // Ficam na linha do TÍTULO, não dentro de uma tela, porque é isso que eles
+  // são: os quatro viram parâmetro de listar_relatorios_painel, então valem
+  // para o Dashboard e para o Histórico de apontamentos ao mesmo tempo -- as
+  // duas telas leem a mesma App.relatorios. Antes, mudar o período no
+  // Dashboard mudava calado o que o Histórico mostrava, sem nada na tela do
+  // Histórico explicando por quê.
   //
-  // "Atualizado às HH:MM", Atualizar e Sair desceram para a primeira linha na
-  // mesma mudança: com os filtros aqui, não cabia tudo na mesma faixa em
-  // 1366px, e ação de sessão perto do nome do painel é onde se procura.
+  // A linha exata veio da referência que o Fábio mandou (09/09): lá os filtros
+  // globais ficam na faixa do título, ao lado do botão de tema, e a faixa das
+  // abas leva "Atualizado às HH:MM", Atualizar e Sair. Passaram algumas horas
+  // na linha das abas -- o pedido inicial dizia isso -- até a segunda imagem
+  // mostrar a disposição pretendida.
   function renderFiltrosGlobais(){
     // Em Cadastros e Configurações não há relatório nenhum em jogo: filtro de
     // período ali seria um controle que não faz nada, que é pior do que a
