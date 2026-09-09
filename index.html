@@ -77,6 +77,35 @@
   .abas-acoes{display:flex; align-items:center; gap:8px; flex-shrink:0;}
   .abas-atualizado{font-size:12px; color:var(--text-dim); white-space:nowrap;}
 
+  /* Filtros do servidor, na linha das abas.
+     São compactos de propósito: dividem a faixa com quatro abas, e uma faixa
+     que cresce empurra a tabela para baixo em toda tela. O rótulo fica ao lado
+     do campo (não acima) pela mesma razão -- rótulo em cima dobraria a altura
+     da linha inteira só para as duas datas. */
+  .topo-filtros{display:flex; align-items:center; gap:7px; flex-shrink:0; padding:6px 0;}
+  .filtro-inline{display:flex; align-items:center; gap:5px;}
+  .filtro-inline > span{font-size:11.5px; font-weight:600; color:var(--text-dim);}
+  /* 7px de padding, e não 5px: é o que iguala campo e botão aos 32px do
+     Atualizar e do Sair. Com 5px o Filtrar saía com 28px e ficava visivelmente
+     menor que todo o resto do topo, desalinhado com os próprios campos. */
+  .topo-filtros input[type=date], .topo-filtros select{
+    padding:7px 8px; border:1px solid var(--border); border-radius:var(--radius-sm);
+    background:var(--surface); color:var(--text); font-size:12.5px;
+  }
+  .topo-filtros input[type=date]:focus, .topo-filtros select:focus{outline:none; border-color:var(--brand);}
+  /* Os dois selects encolhem antes de tudo: nome de fazenda é o texto mais
+     longo aqui, e é o que estouraria a linha numa tela estreita. */
+  .topo-filtros select{max-width:150px;}
+  /* A borda não é enfeite: sem ela o botão fica 30px contra os 32px do
+     Atualizar e do Sair, que têm 1px de cada lado. Dois pixels de diferença
+     bastam para a linha parecer desalinhada. */
+  .btn-filtrar{
+    background:var(--accent); color:#fff; border:1px solid var(--accent);
+    border-radius:var(--radius-sm);
+    font-size:12.5px; font-weight:700; padding:7px 14px; white-space:nowrap;
+  }
+  .btn-filtrar:hover{background:var(--accent-dark); border-color:var(--accent-dark);}
+
   .icon-btn{
     background:var(--surface-2); border:1px solid var(--border); color:var(--text);
     width:32px; height:32px; border-radius:var(--radius-sm);
@@ -1062,6 +1091,11 @@
         '<div class="topo-marca"><img src="'+LOGO+'" alt="GTM"><h1>Painel RDO — GTM</h1></div>'+
         '<span class="topo-sub">Revisão dos apontamentos lançados em campo: conferir medições, validar o que está correto e devolver para correção o que não está.</span>'+
         '<div class="topo-acoes">'+
+          '<span class="abas-atualizado">'+esc(horaAtualizacao())+'</span>'+
+          '<button class="btn-sair" id="btn-atualizar" title="Buscar agora o que chegou do campo">'+
+            (App.carregandoRelatorios ? "Atualizando..." : "Atualizar")+
+          '</button>'+
+          '<button class="btn-sair" id="btn-sair">Sair</button>'+
           '<button class="icon-btn" id="btn-tema" title="Alternar tema">'+(temaAtual()==="dark"?sunIcon():moonIcon())+'</button>'+
         '</div>'+
       '</div>'+
@@ -1069,15 +1103,45 @@
         '<nav class="abas">'+abas.map(function(a){
           return '<button data-aba="'+a.id+'" class="'+(telaAba===a.id?"active":"")+'">'+a.icon+'<span>'+esc(a.label)+'</span></button>';
         }).join("")+'</nav>'+
-        '<div class="abas-acoes">'+
-          '<span class="abas-atualizado">'+esc(horaAtualizacao())+'</span>'+
-          '<button class="btn-sair" id="btn-atualizar" title="Buscar agora o que chegou do campo">'+
-            (App.carregandoRelatorios ? "Atualizando..." : "Atualizar")+
-          '</button>'+
-          '<button class="btn-sair" id="btn-sair">Sair</button>'+
-        '</div>'+
+        renderFiltrosGlobais()+
       '</div>'+
     '</header>';
+  }
+
+  // Os filtros que definem o que o painel carregou do servidor.
+  //
+  // Ficam na linha das abas (pedido do Fábio, 09/09) e não dentro de uma tela,
+  // porque é isso que eles são: os quatro viram parâmetro de
+  // listar_relatorios_painel, então valem para o Dashboard e para o Histórico
+  // de apontamentos ao mesmo tempo -- as duas telas leem a mesma
+  // App.relatorios. Antes, mudar o período no Dashboard mudava calado o que o
+  // Histórico mostrava, sem nada na tela do Histórico explicando por quê.
+  //
+  // "Atualizado às HH:MM", Atualizar e Sair desceram para a primeira linha na
+  // mesma mudança: com os filtros aqui, não cabia tudo na mesma faixa em
+  // 1366px, e ação de sessão perto do nome do painel é onde se procura.
+  function renderFiltrosGlobais(){
+    // Em Cadastros e Configurações não há relatório nenhum em jogo: filtro de
+    // período ali seria um controle que não faz nada, que é pior do que a
+    // ausência dele.
+    if (App.tela !== "dashboard" && App.tela !== "historico" && App.tela !== "detalhe") return "";
+    return '<div class="topo-filtros">'+
+      '<label class="filtro-inline"><span>De</span>'+
+        '<input type="date" id="f-data-inicio" value="'+esc(App.filtros.dataInicio)+'"></label>'+
+      '<label class="filtro-inline"><span>Até</span>'+
+        '<input type="date" id="f-data-fim" value="'+esc(App.filtros.dataFim)+'"></label>'+
+      '<select id="f-cliente" title="Cliente"><option value="">Todos os clientes</option>'+
+        opcoesDistintas(App.relatorios,"cliente").map(function(c){
+          return '<option value="'+esc(c)+'"'+(App.filtros.cliente===c?" selected":"")+'>'+esc(c)+'</option>';
+        }).join("")+
+      '</select>'+
+      '<select id="f-fazenda" title="Fazenda"><option value="">Todas as fazendas</option>'+
+        opcoesDistintas(App.relatorios,"fazenda").map(function(f){
+          return '<option value="'+esc(f)+'"'+(App.filtros.fazenda===f?" selected":"")+'>'+esc(f)+'</option>';
+        }).join("")+
+      '</select>'+
+      '<button class="btn-filtrar" id="btn-filtrar">Filtrar</button>'+
+    '</div>';
   }
   function ligarShellTopo(){
     document.getElementById("btn-tema").onclick = alternarTema;
@@ -1093,6 +1157,25 @@
       if (App.carregandoRelatorios) return;
       carregarRelatorios();
     };
+
+    // Filtrar mora aqui desde que os filtros subiram para a linha das abas.
+    // O getElementById é condicional porque renderFiltrosGlobais() devolve
+    // string vazia em Cadastros e Configurações.
+    var btnFiltrar = document.getElementById("btn-filtrar");
+    if (btnFiltrar) btnFiltrar.onclick = function(){
+      App.filtros.dataInicio = document.getElementById("f-data-inicio").value;
+      App.filtros.dataFim = document.getElementById("f-data-fim").value;
+      App.filtros.cliente = document.getElementById("f-cliente").value;
+      App.filtros.fazenda = document.getElementById("f-fazenda").value;
+      carregarRelatorios();
+    };
+    // Enter em qualquer campo do filtro vale como clicar em Filtrar -- num
+    // campo de data, apertar Enter e não acontecer nada parece travamento.
+    ["f-data-inicio","f-data-fim"].forEach(function(id){
+      var el = document.getElementById(id);
+      if (el) el.onkeydown = function(e){ if (e.key === "Enter" && btnFiltrar) btnFiltrar.click(); };
+    });
+
     document.querySelectorAll("[data-aba]").forEach(function(btn){
       btn.onclick = function(){
         var aba = btn.getAttribute("data-aba");
@@ -1154,20 +1237,14 @@
       '<div class="kpi-card"><p class="valor">'+kpi.fazendas+'</p><p class="label">Fazendas atendidas</p></div>'+
     '</div>';
 
-    html += '<div class="filtros-row">'+
-      '<div class="filtro-campo"><label>De</label><input type="date" id="f-data-inicio" value="'+esc(App.filtros.dataInicio)+'"></div>'+
-      '<div class="filtro-campo"><label>Até</label><input type="date" id="f-data-fim" value="'+esc(App.filtros.dataFim)+'"></div>'+
-      '<div class="filtro-campo"><label>Cliente</label><select id="f-cliente"><option value="">Todos</option>'+
-        opcoesDistintas(App.relatorios,"cliente").map(function(c){ return '<option value="'+esc(c)+'"'+(App.filtros.cliente===c?" selected":"")+'>'+esc(c)+'</option>'; }).join("")+
-      '</select></div>'+
-      '<div class="filtro-campo"><label>Fazenda</label><select id="f-fazenda"><option value="">Todas</option>'+
-        opcoesDistintas(App.relatorios,"fazenda").map(function(f){ return '<option value="'+esc(f)+'"'+(App.filtros.fazenda===f?" selected":"")+'>'+esc(f)+'</option>'; }).join("")+
-      '</select></div>'+
-      '<button class="btn btn-secondary btn-sm" id="btn-filtrar">Filtrar</button>'+
-      // O "Atualizar" que ficava aqui subiu para a barra de abas (09/09): lá ele
-      // vale para todas as abas, e ter dois botões iguais na mesma tela só
-      // gerava dúvida sobre qual dos dois recarregava o quê.
-    '</div>';
+    // Os filtros De/Até/Cliente/Fazenda e o Filtrar que ficavam aqui subiram
+    // para a barra de abas (09/09, a pedido do Fábio). O "Atualizar" tinha
+    // subido antes, pelo mesmo motivo.
+    //
+    // Eles nunca foram desta tela: os quatro viram parâmetro de
+    // listar_relatorios_painel, então definem o que o painel INTEIRO carregou --
+    // o Histórico de apontamentos lê a mesma App.relatorios. Estavam desenhados
+    // dentro do Dashboard por acidente de layout, não por pertencerem a ele.
 
     // Mapa das frentes (GPS dos relatórios)
     var comGps = App.relatorios.filter(function(r){ return r.gps_lat != null && r.gps_lng != null; });
@@ -1259,19 +1336,10 @@
         if (rel) prepararFotosDoRelatorio(rel, render);
       };
     });
-    var btnFiltrar = document.getElementById("btn-filtrar");
-    if (btnFiltrar) btnFiltrar.onclick = function(){
-      App.filtros.dataInicio = document.getElementById("f-data-inicio").value;
-      App.filtros.dataFim = document.getElementById("f-data-fim").value;
-      App.filtros.cliente = document.getElementById("f-cliente").value;
-      App.filtros.fazenda = document.getElementById("f-fazenda").value;
-      carregarRelatorios();
-    };
-    var btnAtualizar = document.getElementById("btn-atualizar");
-    if (btnAtualizar) btnAtualizar.onclick = function(){
-      if (App.carregandoRelatorios) return;   // já está buscando: não empilha
-      carregarRelatorios();
-    };
+    // Filtrar e Atualizar agora moram no topo e são ligados por
+    // ligarShellTopo(). Religar aqui não daria erro (é a mesma função), mas
+    // deixaria dois donos para o mesmo botão -- e o segundo a rodar venceria,
+    // que é como um handler passa a divergir do outro sem ninguém notar.
   }
 
   /* ======================= RENDER: HISTÓRICO DE APONTAMENTOS =======================
