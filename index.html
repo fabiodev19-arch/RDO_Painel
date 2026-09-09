@@ -35,36 +35,134 @@
   button{font-family:inherit; cursor:pointer;}
   input,select,textarea{font-family:inherit;}
   .hidden{display:none !important;}
-  #app{min-height:100vh; display:flex; flex-direction:row;}
+  #app{min-height:100vh; display:flex; flex-direction:column;}
 
-  /* ---------- Sidebar ---------- */
-  .sidebar{
-    width:236px; flex-shrink:0; background:var(--brand-dark); color:#fff;
-    display:flex; flex-direction:column; padding:22px 14px; position:sticky; top:0; height:100vh;
+  /* ---------- Topo: marca + abas ----------
+     Era uma sidebar vertical escura. Virou header horizontal a pedido do Fábio
+     (09/09), seguindo um painel de referência que ele usa: a informação de
+     contexto (que painel é este, o que ele mostra) fica na primeira linha, e a
+     navegação com as ações de sessão na segunda. O ganho prático é largura --
+     a sidebar comia 236px fixos de uma tela cuja tabela tem 10 colunas. */
+  .topo{
+    background:var(--surface); border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:30;
   }
-  .sidebar-brand{display:flex; align-items:center; gap:10px; padding:4px 8px 26px;}
-  .sidebar-brand img{width:32px; height:32px; border-radius:50%; background:#fff; flex-shrink:0;}
-  .sidebar-brand h1{font-size:14.5px; margin:0; font-weight:700; line-height:1.25;}
-  .sidebar-brand p{font-size:11px; margin:1px 0 0; color:rgba(255,255,255,.6);}
-  .sidebar-nav{display:flex; flex-direction:column; gap:2px; flex:1;}
-  .sidebar-nav button{
-    display:flex; align-items:center; gap:11px; text-align:left; background:none; border:none;
-    color:rgba(255,255,255,.72); font-size:13.5px; font-weight:600; padding:10px 12px; border-radius:9px;
-    width:100%;
+  .topo-linha{display:flex; align-items:center; gap:12px; padding:12px 24px;}
+  .topo-marca{display:flex; align-items:center; gap:10px; flex-shrink:0;}
+  .topo-marca img{width:30px; height:30px; border-radius:50%; background:#fff; flex-shrink:0;}
+  .topo-marca h1{font-size:16.5px; margin:0; font-weight:700; line-height:1.2; white-space:nowrap;}
+  /* O subtítulo explica a tela para quem abre pela primeira vez. Encolhe antes
+     do título porque, faltando espaço, saber QUE painel é vale mais do que a
+     explicação. */
+  .topo-sub{
+    font-size:12.5px; color:var(--text-dim); flex:1; min-width:0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
-  .sidebar-nav button svg{width:17px; height:17px; flex-shrink:0; opacity:.85;}
-  .sidebar-nav button.active{background:rgba(255,255,255,.15); color:#fff;}
-  .sidebar-nav button.active svg{opacity:1;}
-  .sidebar-nav button:hover:not(.active){background:rgba(255,255,255,.07);}
-  .sidebar-footer{display:flex; align-items:center; justify-content:space-between; padding-top:14px; margin-top:14px; border-top:1px solid rgba(255,255,255,.12);}
-  .sidebar-footer .btn-sair{background:none; border:none; color:rgba(255,255,255,.72); font-size:12.5px; font-weight:600; padding:8px 10px;}
+  .topo-acoes{display:flex; align-items:center; gap:8px; flex-shrink:0;}
+
+  .abas-linha{
+    display:flex; align-items:center; gap:8px; padding:0 24px;
+    border-top:1px solid var(--border);
+  }
+  .abas{display:flex; align-items:center; gap:2px; flex:1; min-width:0; overflow-x:auto;}
+  .abas button{
+    background:none; border:none; border-bottom:2px solid transparent;
+    color:var(--text-dim); font-size:13.5px; font-weight:600; padding:11px 14px;
+    white-space:nowrap; display:flex; align-items:center; gap:7px;
+  }
+  .abas button svg{width:16px; height:16px; flex-shrink:0; opacity:.8;}
+  .abas button.active{color:var(--brand); border-bottom-color:var(--brand);}
+  html[data-theme="light"] .abas button.active{color:var(--brand-dark); border-bottom-color:var(--brand-dark);}
+  .abas button:hover:not(.active){color:var(--text);}
+  .abas-acoes{display:flex; align-items:center; gap:8px; flex-shrink:0;}
+  .abas-atualizado{font-size:12px; color:var(--text-dim); white-space:nowrap;}
+
   .icon-btn{
-    background:rgba(255,255,255,.12); border:none; color:#fff; width:32px; height:32px;
-    border-radius:9px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    background:var(--surface-2); border:1px solid var(--border); color:var(--text);
+    width:32px; height:32px; border-radius:var(--radius-sm);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
   }
+  .icon-btn:hover{background:var(--surface-3);}
   .icon-btn svg{width:16px; height:16px;}
+  .btn-sair{
+    background:var(--surface-2); border:1px solid var(--border); color:var(--text);
+    font-size:12.5px; font-weight:600; padding:7px 14px; border-radius:var(--radius-sm);
+  }
+  .btn-sair:hover{background:var(--surface-3);}
 
-  main.app-main{flex:1; min-width:0; padding:32px 40px;}
+  main.app-main{flex:1; min-width:0; padding:24px 24px 40px;}
+
+  /* ---------- Histórico de apontamentos ----------
+     Uma linha por APONTAMENTO, não por relatório. É a granularidade em que a
+     revisão acontece: valida-se e devolve-se apontamento, nunca o RDO inteiro
+     (decisão do Fábio, registrada no CLAUDE.md §3). A tela de Relatórios
+     continua existindo para ver o RDO como um todo. */
+  .hist-filtros{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px;}
+  .hist-busca{
+    flex:1; min-width:220px; max-width:320px; padding:9px 12px;
+    border:1px solid var(--border); border-radius:var(--radius-sm);
+    background:var(--surface); color:var(--text); font-size:13.5px;
+  }
+  .hist-busca:focus, .hist-filtros select:focus{outline:none; border-color:var(--brand);}
+  .hist-filtros select{
+    padding:9px 12px; border:1px solid var(--border); border-radius:var(--radius-sm);
+    background:var(--surface); color:var(--text); font-size:13.5px;
+  }
+
+  .card-hist{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); overflow:hidden;
+  }
+  .card-hist-head{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:14px 18px; border-bottom:1px solid var(--border);
+  }
+  .card-hist-head h2{font-size:14.5px; margin:0; font-weight:700;}
+  .card-hist-head .contagem{font-size:12.5px; color:var(--text-dim);}
+  /* Rolagem dentro do card, não na página: o cabeçalho da tabela fica preso no
+     topo e o revisor não perde de vista qual coluna é qual em 20+ linhas. */
+  .card-hist-scroll{max-height:calc(100vh - 300px); overflow:auto;}
+
+  .tabela-hist{width:100%; border-collapse:collapse;}
+  .tabela-hist th{
+    position:sticky; top:0; z-index:1; background:var(--surface);
+    text-align:left; font-size:11px; font-weight:700; color:var(--text-dim);
+    text-transform:uppercase; letter-spacing:.04em; white-space:nowrap;
+    padding:11px 14px; border-bottom:1px solid var(--border);
+  }
+  .tabela-hist td{
+    padding:11px 14px; font-size:13.5px; border-bottom:1px solid var(--border);
+    vertical-align:middle;
+  }
+  .tabela-hist tbody tr:last-child td{border-bottom:none;}
+  .tabela-hist tbody tr:hover{background:var(--surface-2);}
+  .tabela-hist td.col-acoes{white-space:nowrap; text-align:right;}
+  .tabela-hist td.col-num{font-weight:700; color:var(--text-dim); white-space:nowrap;}
+  /* Valor atômico não quebra: "1.250,8 m" em duas linhas custa altura e não
+     ganha nada. Nome de fazenda, frente e tipo de atividade continuam podendo
+     quebrar -- ali cortar seria pior, porque é o que o revisor lê para saber
+     de qual apontamento se trata. */
+  .tabela-hist td.col-medicao, .tabela-hist td.col-data{white-space:nowrap;}
+  /* Apontamento removido no aparelho continua na lista, riscado: sumir com ele
+     esconderia justamente o caso que o revisor precisa enxergar. */
+  .tabela-hist tr.linha-removida td.col-fazenda{text-decoration:line-through; color:var(--text-dim);}
+
+  .badge{
+    display:inline-block; padding:3px 10px; border-radius:999px;
+    font-size:11.5px; font-weight:700; white-space:nowrap;
+  }
+  .badge-alta{background:rgba(201,96,16,.14); color:var(--accent-dark);}
+  html[data-theme="dark"] .badge-alta{color:var(--accent);}
+  .badge-media{background:rgba(224,168,0,.16); color:#8A6500;}
+  html[data-theme="dark"] .badge-media{color:#E0B44A;}
+  .badge-baixa{background:var(--surface-3); color:var(--text-dim);}
+  .badge-pendente{background:rgba(14,123,166,.13); color:var(--brand-dark);}
+  html[data-theme="dark"] .badge-pendente{color:#6FC4E8;}
+  .badge-validado{background:var(--success-bg); color:var(--success);}
+  .badge-devolvido{background:var(--danger-bg); color:var(--danger);}
+  /* Sem line-through aqui: "Removido no aparelho" riscado fica difícil de ler,
+     e o risco já está onde comunica -- no nome da fazenda da linha. */
+  .badge-removida{background:var(--surface-3); color:var(--text-dim);}
 
   .btn{padding:11px 18px; border-radius:var(--radius-sm); border:none; font-size:14px; font-weight:700; cursor:pointer;}
   .btn-primary{background:var(--accent); color:#fff;}
@@ -355,11 +453,14 @@
   var CATEGORIA_ORDEM = Object.keys(CATEGORIA_LABELS);
 
   var App = {
-    tela: "carregando", // carregando | login | mfa-enroll | mfa-verify | dashboard | detalhe | cadastros
+    tela: "carregando", // carregando | login | mfa-enroll | mfa-verify | dashboard | historico | detalhe | cadastros
     erroAuth: "",
     fatorId: null, challengeId: null, qrCode: "", secretManual: "",
-    relatorios: [], carregandoRelatorios: false,
+    relatorios: [], carregandoRelatorios: false, atualizadoEm: null,
     filtros: { dataInicio: "", dataFim: "", cliente: "", fazenda: "" },
+    // Filtros da aba de histórico. Separados dos de cima de propósito: aqueles
+    // vão para o servidor na RPC, estes filtram na tela o que já foi carregado.
+    filtrosHist: { busca: "", fazenda: "", status: "", tipo: "", encarregado: "" },
     relatorioAtualId: null,
     cadastrosAdmin: [], categoriaAtiva: "cliente", cadastrosCarregados: false,
     regrasAdmin: [], regrasCarregadas: false,
@@ -688,6 +789,9 @@
       App.carregandoRelatorios = false;
       if (resp.error){ showToast("Erro ao carregar relatórios: " + resp.error.message); render(); return; }
       App.relatorios = resp.data || [];
+      // Só carimba quando a busca deu certo: no erro, o que está na tela
+      // continua sendo o dado velho, e dizer "atualizado agora" seria mentira.
+      App.atualizadoEm = new Date();
       render();
     }).catch(function(err){
       App.carregandoRelatorios = false;
@@ -737,6 +841,37 @@
         if (!r.ok) console.warn("push não enviado -- HTTP " + r.status);
       });
     }).catch(function(){ /* melhor esforço -- devolução já foi salva de qualquer forma */ });
+  }
+
+  // Pergunta o motivo e devolve o apontamento. Mora aqui fora, e não dentro do
+  // handler de uma tela, porque duas telas devolvem: o detalhe do RDO e o
+  // histórico de apontamentos. Duplicar isso significaria manter dois lugares
+  // com a mesma regra de recarregar-no-erro e disparar push -- e um dos dois
+  // ficaria para trás na primeira mudança.
+  function pedirDevolucaoDeAtividade(id, numero){
+    showPrompt(
+      numero != null ? ("Devolver o apontamento #" + numero + "?") : "Devolver essa atividade?",
+      "Descreva o que precisa ser corrigido. Isso volta pro PWA de quem lançou, com notificação.",
+      "Ex: profundidade não bate com o combinado, confirme no local",
+      "Devolver",
+      function(motivo){
+        supabaseClient.rpc("devolver_atividade_rdo", { p_atividade_id: id, p_motivo: motivo }).then(function(resp){
+          if (resp.error){
+            showToast(resp.error.message || "Não foi possível devolver a atividade.");
+            // Recarrega mesmo no erro: a recusa mais provável é o painel estar
+            // defasado (outra pessoa já devolveu, ou o campo acabou de
+            // reenviar). Sem isso a tela continua mostrando o botão errado e o
+            // revisor tenta de novo.
+            carregarRelatorios();
+            return;
+          }
+          showToast(numero != null ? ("Apontamento #" + numero + " devolvido.") : "Atividade devolvida.");
+          var usuarioId = resp.data && resp.data.usuario_id;
+          if (usuarioId) dispararPushDevolucao(usuarioId, motivo, numero);
+          carregarRelatorios();
+        });
+      }
+    );
   }
 
   function carregarCadastrosAdmin(){
@@ -899,30 +1034,64 @@
     if (btnVoltar) btnVoltar.onclick = sair;
   }
 
-  /* ======================= RENDER: HEADER ======================= */
-  function renderSidebar(){
+  /* ======================= RENDER: TOPO (marca + abas) ======================= */
+  function historicoNavIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12a9 9 0 1 0 2.6-6.4M3 4v5h5"/><path d="M12 7v5l3.5 2"/></svg>'; }
+
+  // "Atualizado às HH:MM" -- diz de quando é o que está na tela. Numa tela que
+  // recarrega sozinha por Realtime, sem esse carimbo o revisor não distingue
+  // "não chegou nada" de "parou de atualizar".
+  function horaAtualizacao(){
+    if (!App.atualizadoEm) return "";
+    var d = App.atualizadoEm;
+    return "Atualizado às " + String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+  }
+
+  function renderShellTopo(){
     if (App.tela === "login" || App.tela === "mfa-enroll" || App.tela === "mfa-verify" || App.tela === "carregando") return "";
     var abas = [
-      { id:"dashboard", label:"Relatórios", icon:relatoriosNavIcon() },
-      { id:"cadastros", label:"Cadastros", icon:cadastrosNavIcon() },
+      { id:"dashboard",     label:"Relatórios",    icon:relatoriosNavIcon() },
+      { id:"historico",     label:"Histórico de apontamentos", icon:historicoNavIcon() },
+      { id:"cadastros",     label:"Cadastros",     icon:cadastrosNavIcon() },
       { id:"configuracoes", label:"Configurações", icon:configNavIcon() }
     ];
+    // O detalhe de um RDO é uma tela interna de Relatórios: a aba fica acesa
+    // nela, senão o revisor perde a noção de onde está ao abrir um relatório.
     var telaAba = App.tela === "detalhe" ? "dashboard" : App.tela;
-    return '<aside class="sidebar">'+
-      '<div class="sidebar-brand"><img src="'+LOGO+'" alt="GTM"><div><h1>GTM · Painel RDO</h1><p>Relatório Diário de Obra</p></div></div>'+
-      '<nav class="sidebar-nav">'+abas.map(function(a){
-        return '<button data-aba="'+a.id+'" class="'+(telaAba===a.id?"active":"")+'">'+a.icon+'<span>'+a.label+'</span></button>';
-      }).join("")+'</nav>'+
-      '<div class="sidebar-footer">'+
-        '<button class="btn-sair" id="btn-sair">Sair</button>'+
-        '<button class="icon-btn" id="btn-tema">'+(temaAtual()==="dark"?sunIcon():moonIcon())+'</button>'+
+    return '<header class="topo">'+
+      '<div class="topo-linha">'+
+        '<div class="topo-marca"><img src="'+LOGO+'" alt="GTM"><h1>Painel RDO — GTM</h1></div>'+
+        '<span class="topo-sub">Revisão dos apontamentos lançados em campo: conferir medições, validar o que está correto e devolver para correção o que não está.</span>'+
+        '<div class="topo-acoes">'+
+          '<button class="icon-btn" id="btn-tema" title="Alternar tema">'+(temaAtual()==="dark"?sunIcon():moonIcon())+'</button>'+
+        '</div>'+
       '</div>'+
-    '</aside>';
+      '<div class="abas-linha">'+
+        '<nav class="abas">'+abas.map(function(a){
+          return '<button data-aba="'+a.id+'" class="'+(telaAba===a.id?"active":"")+'">'+a.icon+'<span>'+esc(a.label)+'</span></button>';
+        }).join("")+'</nav>'+
+        '<div class="abas-acoes">'+
+          '<span class="abas-atualizado">'+esc(horaAtualizacao())+'</span>'+
+          '<button class="btn-sair" id="btn-atualizar" title="Buscar agora o que chegou do campo">'+
+            (App.carregandoRelatorios ? "Atualizando..." : "Atualizar")+
+          '</button>'+
+          '<button class="btn-sair" id="btn-sair">Sair</button>'+
+        '</div>'+
+      '</div>'+
+    '</header>';
   }
-  function ligarSidebar(){
+  function ligarShellTopo(){
     document.getElementById("btn-tema").onclick = alternarTema;
     document.getElementById("btn-sair").onclick = function(){
       showConfirm("Sair do painel?", "Você precisará fazer login novamente.", "Sair", sair);
+    };
+    // Atualizar subiu da tela de Relatórios para o topo: agora vale para
+    // qualquer aba, e não conflita com o aviso automático -- os dois chamam a
+    // mesma carregarRelatorios(). Serve para quando o revisor quer conferir
+    // agora, e como saída se o Realtime cair ou a aba ficar suspensa.
+    var btnAtualizar = document.getElementById("btn-atualizar");
+    if (btnAtualizar) btnAtualizar.onclick = function(){
+      if (App.carregandoRelatorios) return;
+      carregarRelatorios();
     };
     document.querySelectorAll("[data-aba]").forEach(function(btn){
       btn.onclick = function(){
@@ -995,13 +1164,9 @@
         opcoesDistintas(App.relatorios,"fazenda").map(function(f){ return '<option value="'+esc(f)+'"'+(App.filtros.fazenda===f?" selected":"")+'>'+esc(f)+'</option>'; }).join("")+
       '</select></div>'+
       '<button class="btn btn-secondary btn-sm" id="btn-filtrar">Filtrar</button>'+
-      // Atualizar na mão, ao lado de Filtrar. Não conflita com o aviso
-      // automático -- os dois chamam a mesma carregarRelatorios(). Serve para
-      // quando o revisor quer conferir agora, e como saída se o Realtime
-      // estiver fora do ar ou o navegador tiver suspendido a aba.
-      '<button class="btn btn-secondary btn-sm" id="btn-atualizar" title="Buscar agora o que chegou do campo">'+
-        (App.carregandoRelatorios ? "Atualizando..." : "Atualizar")+
-      '</button>'+
+      // O "Atualizar" que ficava aqui subiu para a barra de abas (09/09): lá ele
+      // vale para todas as abas, e ter dois botões iguais na mesma tela só
+      // gerava dúvida sobre qual dos dois recarregava o quê.
     '</div>';
 
     // Mapa das frentes (GPS dos relatórios)
@@ -1107,6 +1272,284 @@
       if (App.carregandoRelatorios) return;   // já está buscando: não empilha
       carregarRelatorios();
     };
+  }
+
+  /* ======================= RENDER: HISTÓRICO DE APONTAMENTOS =======================
+     Uma linha por APONTAMENTO. A tela de Relatórios mostra um RDO por linha,
+     que é a visão de quem quer o documento inteiro; esta é a visão de quem
+     revisa, e revisão aqui é sempre por apontamento (CLAUDE.md §3).
+
+     Tudo o que a tela precisa já vem de listar_relatorios_painel -- não houve
+     SQL novo. Os campos do relatório (fazenda, cliente, frente, encarregado)
+     são copiados para cada apontamento na hora de planificar, porque a tabela
+     é plana e cada linha tem que se explicar sozinha. */
+
+  // Desmonta a lista de relatórios numa lista de apontamentos, cada um já com o
+  // contexto do RDO a que pertence.
+  function apontamentosPlanificados(){
+    var out = [];
+    (App.relatorios || []).forEach(function(r){
+      (r.atividades || []).forEach(function(a){
+        out.push({
+          rel: r,
+          ativ: a,
+          fazenda: r.fazenda || "",
+          cliente: r.cliente || "",
+          frente: r.equipe_frente || "",
+          encarregado: r.encarregado || "",
+          data: r.data_relatorio,
+          sincronizadoEm: r.sincronizado_em
+        });
+      });
+    });
+    // Mais recente primeiro, e dentro do mesmo dia o número maior primeiro --
+    // o que acabou de chegar é o que o revisor está esperando.
+    out.sort(function(x, y){
+      var dx = String(x.data || ""), dy = String(y.data || "");
+      if (dx !== dy) return dx < dy ? 1 : -1;
+      return (y.ativ.numero || 0) - (x.ativ.numero || 0);
+    });
+    return out;
+  }
+
+  // A medida que representa o apontamento, em uma célula.
+  //
+  // Não existe uma medida só: cada formulário preenche o que faz sentido para
+  // ele (o mesmo motivo de renderResumoAtividade ter três caminhos). A ordem
+  // abaixo segue a daquela função -- máquina detalhada, hora-máquina, e o
+  // formulário padrão de medição -- para as duas telas nunca discordarem sobre
+  // qual é o número principal de um apontamento.
+  function medicaoResumida(a){
+    var maquinas = a.maquinas || [];
+    if (a.data_execucao && maquinas.length){
+      var total = 0, achou = false;
+      maquinas.forEach(function(m){
+        var d = m.dados || {};
+        if (d.quantidade != null){ total += Number(d.quantidade) || 0; achou = true; }
+      });
+      if (achou) return fmtNum(total) + " qtd";
+    }
+    if (maquinas.length){
+      var horas = 0, temHora = false;
+      maquinas.forEach(function(m){
+        var d = m.dados || {};
+        if (d.hora_inicial != null && d.hora_final != null){
+          horas += (Number(d.hora_final) || 0) - (Number(d.hora_inicial) || 0);
+          temHora = true;
+        }
+      });
+      if (temHora) return fmtNum(horas) + " h";
+    }
+    if (a.comprimento_m != null) return fmtNum(a.comprimento_m) + " m";
+    if (a.profundidade_cm != null) return fmtNum(a.profundidade_cm) + " cm";
+    if (a.dmt_km_inicial != null && a.dmt_km_final != null){
+      return fmtNum(a.dmt_km_inicial) + "–" + fmtNum(a.dmt_km_final) + " km";
+    }
+    return "—";
+  }
+
+  function diasDesde(iso){
+    if (!iso) return null;
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    return Math.floor((Date.now() - d.getTime()) / 86400000);
+  }
+
+  // Prioridade = urgência DE REVISÃO, não importância do serviço.
+  //
+  // A coluna existe porque o painel de referência tem uma, mas o RDO não tem
+  // campo de prioridade e inventar um seria pedir ao operador que classificasse
+  // o próprio trabalho. Então ela é derivada do que o revisor precisa saber:
+  // o que está parado esperando ELE.
+  //
+  //   pendente há 3 dias ou mais -> Alta   (envelheceu na fila)
+  //   pendente há menos que isso -> Média  (fila normal)
+  //   devolvido                  -> Baixa  (a bola está com o campo)
+  //   validado / removido        -> Baixa  (não espera ninguém)
+  //
+  // O title diz de onde saiu, senão vira número mágico na tela.
+  function prioridadeApontamento(ap){
+    var a = ap.ativ;
+    if (a.excluido_em) return { classe:"baixa", rotulo:"Baixa", motivo:"Removido no aparelho: não espera revisão." };
+    if (a.status_revisao === "devolvido") return { classe:"baixa", rotulo:"Baixa", motivo:"Devolvido: aguardando correção do encarregado." };
+    if (a.status_revisao === "validado") return { classe:"baixa", rotulo:"Baixa", motivo:"Já validado." };
+    var dias = diasDesde(ap.sincronizadoEm || ap.data);
+    if (dias != null && dias >= 3){
+      return { classe:"alta", rotulo:"Alta", motivo:"Pendente de revisão há " + dias + " dia(s)." };
+    }
+    return { classe:"media", rotulo:"Média",
+      motivo: dias == null ? "Pendente de revisão." : "Pendente de revisão há " + dias + " dia(s)." };
+  }
+
+  function statusApontamento(a){
+    if (a.excluido_em){
+      return { classe:"removida", rotulo:"Removido no aparelho",
+        motivo:"O operador removeu do aplicativo" + (a.status_anterior_exclusao ? " (estava " + a.status_anterior_exclusao + ")" : "") + ". A linha e as fotos continuam no banco." };
+    }
+    if (a.status_revisao === "validado") return { classe:"validado", rotulo:"Validado", motivo:"" };
+    if (a.status_revisao === "devolvido") return { classe:"devolvido", rotulo:"Devolvido", motivo: a.motivo_devolucao || "" };
+    return { classe:"pendente", rotulo:"Pendente", motivo:"Aguardando revisão." };
+  }
+
+  function textoBuscavelDoApontamento(ap){
+    return [ap.fazenda, ap.cliente, ap.frente, ap.encarregado,
+            ap.ativ.tipo_atividade, ap.ativ.up, ap.ativ.trecho,
+            ap.ativ.numero != null ? ("#" + ap.ativ.numero) : ""].join(" ").toLowerCase();
+  }
+
+  function apontamentosFiltrados(){
+    var f = App.filtrosHist;
+    var busca = (f.busca || "").trim().toLowerCase();
+    return apontamentosPlanificados().filter(function(ap){
+      if (f.fazenda && ap.fazenda !== f.fazenda) return false;
+      if (f.encarregado && ap.encarregado !== f.encarregado) return false;
+      if (f.tipo && ap.ativ.tipo_atividade !== f.tipo) return false;
+      if (f.status){
+        // "removido" é um estado à parte: um apontamento removido guarda o
+        // status_revisao que tinha antes, então filtrar por "pendente" traria
+        // removidos junto se a checagem fosse só pelo campo.
+        if (f.status === "removido"){ if (!ap.ativ.excluido_em) return false; }
+        else if (ap.ativ.excluido_em || ap.ativ.status_revisao !== f.status) return false;
+      }
+      if (busca && textoBuscavelDoApontamento(ap).indexOf(busca) === -1) return false;
+      return true;
+    });
+  }
+
+  function renderTelaHistorico(){
+    var todos = apontamentosPlanificados();
+    var lista = apontamentosFiltrados();
+    var f = App.filtrosHist;
+
+    function selectDe(id, rotuloTodos, valores, selecionado){
+      return '<select id="'+id+'"><option value="">'+esc(rotuloTodos)+'</option>'+
+        valores.map(function(v){
+          return '<option value="'+esc(v)+'"'+(selecionado===v?" selected":"")+'>'+esc(v)+'</option>';
+        }).join("")+'</select>';
+    }
+    function valoresDistintos(fn){
+      var vistos = {}, out = [];
+      todos.forEach(function(ap){ var v = fn(ap); if (v && !vistos[v]){ vistos[v] = true; out.push(v); } });
+      out.sort();
+      return out;
+    }
+
+    var html = '<div class="hist-filtros">'+
+      '<input type="text" class="hist-busca" id="h-busca" placeholder="Buscar fazenda, cliente, tipo ou #número..." value="'+esc(f.busca)+'">'+
+      selectDe("h-fazenda", "Todas as fazendas", valoresDistintos(function(ap){ return ap.fazenda; }), f.fazenda)+
+      selectDe("h-tipo", "Todos os tipos", valoresDistintos(function(ap){ return ap.ativ.tipo_atividade; }), f.tipo)+
+      selectDe("h-encarregado", "Todos os encarregados", valoresDistintos(function(ap){ return ap.encarregado; }), f.encarregado)+
+      '<select id="h-status"><option value="">Todos os status</option>'+
+        [["pendente","Pendente"],["validado","Validado"],["devolvido","Devolvido"],["removido","Removido no aparelho"]].map(function(o){
+          return '<option value="'+o[0]+'"'+(f.status===o[0]?" selected":"")+'>'+esc(o[1])+'</option>';
+        }).join("")+
+      '</select>'+
+    '</div>';
+
+    if (App.carregandoRelatorios){
+      return html + '<div class="spinner-wrap"><div class="spinner"></div></div>';
+    }
+
+    html += '<div class="card-hist">'+
+      '<div class="card-hist-head">'+
+        '<h2>Histórico de apontamentos</h2>'+
+        '<span class="contagem">'+lista.length+' apontamento(s)'+
+          (lista.length !== todos.length ? ' de '+todos.length : '')+
+        '</span>'+
+      '</div>';
+
+    if (!lista.length){
+      html += '<div class="empty-state">'+
+        (todos.length ? 'Nenhum apontamento bate com esse filtro.' : 'Nenhum apontamento sincronizado ainda.')+
+      '</div></div>';
+      return html;
+    }
+
+    html += '<div class="card-hist-scroll"><table class="tabela-hist"><thead><tr>'+
+      '<th>Nº</th><th>Fazenda</th><th>Cliente</th><th>Frente/Equipe</th>'+
+      '<th>Data do RDO</th><th>Encarregado</th><th>Tipo de atividade</th>'+
+      '<th>Prioridade</th><th>Medição</th><th>Status</th><th></th>'+
+    '</tr></thead><tbody>';
+
+    html += lista.map(function(ap){
+      var a = ap.ativ;
+      var prio = prioridadeApontamento(ap);
+      var st = statusApontamento(a);
+      var removido = !!a.excluido_em;
+      var devolvido = !removido && a.status_revisao === "devolvido";
+
+      // O botão de devolver fica travado enquanto a bola está com o campo --
+      // mesma regra de alternância da tela de detalhe, e quem garante é o
+      // banco (trava_devolucao_alternada.sql). Aqui é só não convidar ao
+      // clique que o servidor vai recusar.
+      var botaoDevolver = removido
+        ? '<button class="btn-tabela" disabled title="Apontamento removido no aplicativo pelo operador.">Devolver</button>'
+        : (devolvido
+            ? '<button class="btn-tabela" disabled title="'+esc(a.motivo_devolucao || "Aguardando o encarregado corrigir e reenviar pelo aplicativo.")+'">Aguardando correção</button>'
+            : '<button class="btn-tabela" data-action="hist-devolver" data-id="'+esc(a.id)+'" data-numero="'+esc(a.numero == null ? "" : a.numero)+'">Devolver para correção</button>');
+
+      return '<tr'+(removido?' class="linha-removida"':'')+'>'+
+        '<td class="col-num">'+(a.numero != null ? "#"+esc(a.numero) : "—")+'</td>'+
+        '<td class="col-fazenda">'+esc(ap.fazenda || "—")+'</td>'+
+        '<td>'+esc(ap.cliente || "—")+'</td>'+
+        '<td>'+esc(ap.frente || "—")+'</td>'+
+        '<td class="col-data">'+formatarData(ap.data)+'</td>'+
+        '<td>'+esc(ap.encarregado || "—")+'</td>'+
+        '<td>'+esc(a.tipo_atividade || "—")+'</td>'+
+        '<td><span class="badge badge-'+prio.classe+'" title="'+esc(prio.motivo)+'">'+esc(prio.rotulo)+'</span></td>'+
+        '<td class="col-medicao">'+esc(medicaoResumida(a))+'</td>'+
+        '<td><span class="badge badge-'+st.classe+'"'+(st.motivo?' title="'+esc(st.motivo)+'"':'')+'>'+esc(st.rotulo)+'</span></td>'+
+        '<td class="col-acoes">'+
+          '<button class="btn-tabela" data-action="hist-abrir" data-rel="'+esc(ap.rel.id)+'">Editar</button> '+
+          botaoDevolver+
+        '</td>'+
+      '</tr>';
+    }).join("");
+
+    html += '</tbody></table></div></div>';
+    return html;
+  }
+
+  function ligarTelaHistorico(){
+    // Os filtros são de tela, não de servidor: filtram o que já foi carregado,
+    // então respondem na hora, sem ida ao banco a cada tecla.
+    function ligarFiltro(id, campo, evento){
+      var el = document.getElementById(id);
+      if (!el) return;
+      el[evento] = function(){ App.filtrosHist[campo] = el.value; render(); };
+    }
+    var busca = document.getElementById("h-busca");
+    if (busca){
+      busca.oninput = function(){
+        App.filtrosHist.busca = busca.value;
+        render();
+        // render() refaz o campo, então o foco e o cursor voltam para o fim --
+        // sem isto o revisor digita uma letra e perde o campo.
+        var novo = document.getElementById("h-busca");
+        if (novo){ novo.focus(); novo.setSelectionRange(novo.value.length, novo.value.length); }
+      };
+    }
+    ligarFiltro("h-fazenda", "fazenda", "onchange");
+    ligarFiltro("h-tipo", "tipo", "onchange");
+    ligarFiltro("h-encarregado", "encarregado", "onchange");
+    ligarFiltro("h-status", "status", "onchange");
+
+    document.querySelectorAll('[data-action="hist-abrir"]').forEach(function(btn){
+      btn.onclick = function(){
+        App.relatorioAtualId = btn.getAttribute("data-rel");
+        App.tela = "detalhe";
+        render();
+        var rel = relatorioAtual();
+        if (rel) prepararFotosDoRelatorio(rel, render);
+      };
+    });
+
+    document.querySelectorAll('[data-action="hist-devolver"]').forEach(function(btn){
+      btn.onclick = function(){
+        var numeroTxt = btn.getAttribute("data-numero");
+        pedirDevolucaoDeAtividade(btn.getAttribute("data-id"), numeroTxt ? Number(numeroTxt) : null);
+      };
+    });
   }
 
   /* ======================= RENDER: DETALHE ======================= */
@@ -1285,29 +1728,7 @@
             if (x.id === id && x.numero != null) ativNumero = x.numero;
           });
         }
-        showPrompt(
-          "Devolver essa atividade?",
-          "Descreva o que precisa ser corrigido. Isso volta pro PWA de quem lançou, com notificação.",
-          "Ex: profundidade não bate com o combinado, confirme no local",
-          "Devolver",
-          function(motivo){
-            supabaseClient.rpc("devolver_atividade_rdo", { p_atividade_id: id, p_motivo: motivo }).then(function(resp){
-              if (resp.error){
-                showToast(resp.error.message || "Não foi possível devolver a atividade.");
-                // Recarrega mesmo no erro: a recusa mais provável é o painel
-                // estar defasado (outra pessoa já devolveu, ou o campo acabou
-                // de reenviar). Sem isso a tela continua mostrando o botão
-                // errado e o revisor tenta de novo.
-                carregarRelatorios();
-                return;
-              }
-              showToast("Atividade devolvida.");
-              var usuarioId = resp.data && resp.data.usuario_id;
-              if (usuarioId) dispararPushDevolucao(usuarioId, motivo, ativNumero);
-              carregarRelatorios();
-            });
-          }
-        );
+        pedirDevolucaoDeAtividade(id, ativNumero);
       };
     });
     document.querySelectorAll(".fotos-grid img").forEach(function(img){
@@ -1696,14 +2117,15 @@
     else if (App.tela === "mfa-enroll") mainHtml = renderTelaMfaEnroll();
     else if (App.tela === "mfa-verify") mainHtml = renderTelaMfaVerify();
     else if (App.tela === "dashboard") mainHtml = renderDashboard();
+    else if (App.tela === "historico") mainHtml = renderTelaHistorico();
     else if (App.tela === "detalhe") mainHtml = renderTelaDetalhe();
     else if (App.tela === "cadastros") mainHtml = renderTelaCadastros();
     else if (App.tela === "configuracoes") mainHtml = renderTelaConfiguracoes();
 
-    var sidebar = renderSidebar();
-    if (sidebar){
-      app.innerHTML = sidebar + '<main class="app-main">'+mainHtml+'</main>';
-      ligarSidebar();
+    var topo = renderShellTopo();
+    if (topo){
+      app.innerHTML = topo + '<main class="app-main">'+mainHtml+'</main>';
+      ligarShellTopo();
     } else {
       app.innerHTML = mainHtml;
     }
@@ -1712,6 +2134,7 @@
     else if (App.tela === "mfa-enroll") ligarTelaMfa("enroll");
     else if (App.tela === "mfa-verify") ligarTelaMfa("verify");
     else if (App.tela === "dashboard") ligarDashboard();
+    else if (App.tela === "historico") ligarTelaHistorico();
     else if (App.tela === "detalhe") ligarTelaDetalhe();
     else if (App.tela === "cadastros") ligarTelaCadastros();
     else if (App.tela === "configuracoes") ligarTelaConfiguracoes();
