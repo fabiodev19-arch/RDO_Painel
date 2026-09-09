@@ -87,6 +87,45 @@ function responder(req: Request, corpo: unknown, status: number): Response {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Primeiro nome de quem vai receber a notificação
+// ---------------------------------------------------------------------------
+// Chamar a pessoa pelo nome muda o que a notificação comunica: "Fabio,
+// apontamento devolvido" é recado para ELE; "Apontamento devolvido" é aviso
+// de sistema, que se ignora na tela bloqueada.
+//
+// Quem monta é o servidor, não o painel. O painel poderia mandar o nome
+// pronto, mas aí seria um dado vindo do cliente decidindo o que a outra pessoa
+// lê -- o mesmo motivo pelo qual as RPCs recalculam em vez de confiar no
+// payload (BOAS_PRATICAS.md §2).
+//
+// Duas fontes, nesta ordem:
+//   1. user_metadata.nome, quando cadastrado -- sai correto e acentuado.
+//   2. o local-part do e-mail (fabio.romero@... -> "Fabio") -- funciona hoje,
+//      sem depender de cadastro nenhum, mas vem sem acento.
+// Sem nenhuma das duas, a notificação sai sem nome em vez de sair errada.
+function primeiroNomeDe(email: string | undefined, metadata: Record<string, unknown> | undefined): string {
+  function capitalizar(bruto: string): string {
+    const limpo = bruto.trim();
+    if (!limpo) return "";
+    return limpo.charAt(0).toLocaleUpperCase("pt-BR") + limpo.slice(1).toLocaleLowerCase("pt-BR");
+  }
+
+  const nomeCadastrado = typeof metadata?.nome === "string" ? metadata.nome as string : "";
+  if (nomeCadastrado.trim()) {
+    return capitalizar(nomeCadastrado.trim().split(/\s+/)[0]);
+  }
+
+  const local = (email ?? "").split("@")[0];
+  if (!local) return "";
+  // fabio.romero / fabio_romero / fabio-romero -> "fabio"
+  const primeiro = local.split(/[._-]/)[0];
+  // Login genérico do tipo "equipe01" vira "Equipe01" -- estranho, mas melhor
+  // do que inventar um nome. Só descarta o que é puro número.
+  if (!primeiro || /^\d+$/.test(primeiro)) return "";
+  return capitalizar(primeiro);
+}
+
 Deno.serve(async (req: Request) => {
   // O preflight tem que ser respondido ANTES da checagem de método, senão cai
   // no 405 e a chamada real nunca acontece.
@@ -146,6 +185,26 @@ Deno.serve(async (req: Request) => {
     return responder(req, { enviados: 0, motivo: "usuário sem inscrição de push" }, 200);
   }
 
+  // Busca o destinatário para personalizar o título. Falhar aqui não pode
+  // impedir o envio: sem nome a notificação ainda é útil, e perder o aviso
+  // por causa de um enfeite seria o pior dos mundos.
+  let primeiroNome = "";
+  try {
+    const { data: dadosUsuario } = await supabaseAdmin.auth.admin.getUserById(usuarioId);
+    primeiroNome = primeiroNomeDe(
+      dadosUsuario?.user?.email,
+      dadosUsuario?.user?.user_metadata as Record<string, unknown> | undefined
+    );
+  } catch (err) {
+    console.error("não consegui ler o nome do destinatário: " + String(err));
+  }
+
+  // O painel manda o motivo como `corpo`. O título é montado aqui.
+  const tituloBase = body.titulo || "Apontamento devolvido";
+  const tituloFinal = primeiroNome
+    ? `${primeiroNome}, ${tituloBase.charAt(0).toLocaleLowerCase("pt-BR")}${tituloBase.slice(1)}`
+    : tituloBase;
+
   let enviados = 0;
   const idsParaRemover: string[] = [];
 
@@ -154,7 +213,7 @@ Deno.serve(async (req: Request) => {
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          JSON.stringify({ titulo: body.titulo || "GTM RDO", corpo: body.corpo || "" })
+          JSON.stringify({ titulo: tituloFinal, corpo: body.corpo || "" })
         );
         enviados++;
       } catch (err) {
