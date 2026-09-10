@@ -430,12 +430,34 @@
     display:flex; align-items:center; gap:8px; max-width:min(380px, 60vw);
   }
   .toast.show{opacity:1; transform:translateY(0);}
-  /* Sucesso em verde com check: confirma sem obrigar a ler. O tom é o mesmo
-     --success dos badges "Validado", para a tela falar uma língua só. */
+
+  /* Sucesso: verde SÓLIDO com texto branco.
+     A primeira versão usava --success-bg, que é rgba(...,.10) -- cor de FUNDO
+     DE BADGE, feita para a pastilha "Validado" dentro de uma linha da tabela.
+     Num aviso flutuante ela desaparece: 10% de tinta e o texto no mesmo verde.
+     Aviso de sistema precisa ser visto sem procurar. */
+  /* Cores PRÓPRIAS do aviso, não as do badge "Validado".
+     Reaproveitar --success dava 4,3:1 de contraste no claro e 3,1:1 no escuro
+     -- medido (ferramentas/medir_toast.js), sendo 4,5:1 o mínimo legível.
+     Aquele verde foi escolhido para ser TEXTO sobre fundo claro, não FUNDO de
+     texto branco. No tema escuro a saída inverte: verde claro com texto quase
+     preto, porque verde escuro sobre tela escura destacaria pouco. */
   .toast.ok{
-    background:var(--success-bg); border-color:var(--success); color:var(--success);
+    background:#15803D; border-color:#15803D; color:#fff;
+    box-shadow:0 8px 24px rgba(0,0,0,.28);
   }
-  .toast svg{width:16px; height:16px; flex-shrink:0;}
+  html[data-theme="dark"] .toast.ok{
+    background:#34D399; border-color:#34D399; color:#04231A;
+  }
+  .toast.ok svg{color:currentColor;}
+  .toast svg{width:18px; height:18px; flex-shrink:0;}
+  /* Entrada com um pulo curto: é o movimento que faz o olho notar. Só na
+     entrada -- repetir enquanto está na tela vira distração. */
+  .toast.show.ok{animation:toastEntra .28s cubic-bezier(.2,.9,.3,1.4);}
+  @keyframes toastEntra{
+    0%{transform:translateY(-14px) scale(.96);}
+    100%{transform:translateY(0) scale(1);}
+  }
 
   /* Aviso de chegada do campo.
      O toast comum aparece no rodapé, discreto, e some em 2,2s -- bom para
