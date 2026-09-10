@@ -170,13 +170,41 @@
   }
   .tabela-hist tbody tr:last-child td{border-bottom:none;}
   .tabela-hist tbody tr:hover{background:var(--surface-2);}
-  .tabela-hist td.col-acoes{white-space:nowrap; text-align:right;}
+  /* Ações grudadas à direita.
+     Com 13 colunas a tabela passa a ser mais larga que o card e ganha rolagem
+     horizontal -- e sem isto a coluna de Editar/Devolver, que é a AÇÃO da tela,
+     ficava fora da vista até o revisor rolar. Coluna de ação escondida atrás de
+     rolagem é o mesmo que não existir. */
+  .tabela-hist td.col-acoes, .tabela-hist th:last-child{
+    position:sticky; right:0; z-index:2;
+    background:var(--surface); white-space:nowrap; text-align:right;
+    border-left:1px solid var(--border);
+  }
+  .tabela-hist th:last-child{z-index:3;}
+  /* O hover pinta a linha, mas a célula grudada tem fundo próprio -- sem isto
+     ela fica destoando da linha inteira ao passar o mouse. */
+  .tabela-hist tbody tr:hover td.col-acoes{background:var(--surface-2);}
   .tabela-hist td.col-num{font-weight:700; color:var(--text-dim); white-space:nowrap;}
   /* Valor atômico não quebra: "1.250,8 m" em duas linhas custa altura e não
      ganha nada. Nome de fazenda, frente e tipo de atividade continuam podendo
      quebrar -- ali cortar seria pior, porque é o que o revisor lê para saber
      de qual apontamento se trata. */
   .tabela-hist td.col-medicao, .tabela-hist td.col-data{white-space:nowrap;}
+  .tabela-hist td.col-medicao{font-weight:700;}
+  /* Segunda informação da mesma célula (o operador embaixo do equipamento, a
+     contagem de linhas embaixo do número). Menor e mais clara, para não
+     competir com o dado principal. */
+  .col-sub{font-size:11.5px; color:var(--text-dim); font-weight:400; margin-top:2px;}
+  /* Linha irmã: outra produção do MESMO apontamento. Sem borda em cima, para as
+     linhas do mesmo apontamento lerem como um bloco só -- é o que substitui
+     repetir número e fazenda em todas elas. */
+  .tabela-hist tbody tr.linha-irma td{border-top:none;}
+  .tabela-hist tbody tr.linha-irma td:first-child{
+    border-left:2px solid var(--border);
+  }
+  /* Sem descrição não há tarifa, e sem tarifa não há produção. É uma pendência
+     de preenchimento, não um erro -- por isso discreto, e não em vermelho. */
+  .col-sem-descricao{font-style:italic; color:var(--text-dim);}
   /* Apontamento removido no aparelho continua na lista, riscado: sumir com ele
      esconderia justamente o caso que o revisor precisa enxergar. */
   .tabela-hist tr.linha-removida td.col-fazenda{text-decoration:line-through; color:var(--text-dim);}
@@ -1367,62 +1395,78 @@
     var out = [];
     (App.relatorios || []).forEach(function(r){
       (r.atividades || []).forEach(function(a){
-        out.push({
-          rel: r,
-          ativ: a,
-          fazenda: r.fazenda || "",
-          cliente: r.cliente || "",
-          frente: r.equipe_frente || "",
-          encarregado: r.encarregado || "",
-          data: r.data_relatorio,
-          sincronizadoEm: r.sincronizado_em
+        // Uma linha por PRODUÇÃO, não por apontamento.
+        //
+        // Quem decide quantas é o formulário, e o servidor já resolveu isso:
+        // 'padrão de obra' devolve uma produção (as medidas são do
+        // apontamento); 'máquinas detalhado' e 'hora máquina' devolvem uma por
+        // máquina, porque lá cada uma tem medidas e tarifa próprias -- a
+        // escavadeira pode estar em M³ e o caminhão em HT no mesmo serviço.
+        //
+        // É também a granularidade da planilha que o escritório usa, onde cada
+        // linha é um ID MÁQUINA com as medidas dele.
+        var prods = a.producoes && a.producoes.length ? a.producoes : [null];
+        prods.forEach(function(p, i){
+          out.push({
+            rel: r,
+            ativ: a,
+            prod: p || {},
+            // Para agrupar visualmente as linhas do mesmo apontamento: só a
+            // primeira repete o número e a fazenda, senão a tabela vira uma
+            // parede de texto repetido.
+            primeiraDoApontamento: i === 0,
+            totalProducoes: prods.length,
+            fazenda: r.fazenda || "",
+            cliente: r.cliente || "",
+            frente: r.equipe_frente || "",
+            encarregado: r.encarregado || "",
+            data: r.data_relatorio,
+            sincronizadoEm: r.sincronizado_em
+          });
         });
       });
     });
     // Mais recente primeiro, e dentro do mesmo dia o número maior primeiro --
     // o que acabou de chegar é o que o revisor está esperando.
+    //
+    // O terceiro critério não é enfeite: sem ele, as linhas de um mesmo
+    // apontamento poderiam se separar na ordenação, e o agrupamento visual
+    // (só a primeira mostra o número) passaria a marcar a linha errada.
     out.sort(function(x, y){
       var dx = String(x.data || ""), dy = String(y.data || "");
       if (dx !== dy) return dx < dy ? 1 : -1;
-      return (y.ativ.numero || 0) - (x.ativ.numero || 0);
+      var nx = x.ativ.numero || 0, ny = y.ativ.numero || 0;
+      if (nx !== ny) return ny - nx;
+      return 0;   // mesma atividade: mantém a ordem das produções como veio do servidor
     });
     return out;
   }
 
-  // A medida que representa o apontamento, em uma célula.
+  // A produção de uma linha, formatada.
   //
-  // Não existe uma medida só: cada formulário preenche o que faz sentido para
-  // ele (o mesmo motivo de renderResumoAtividade ter três caminhos). A ordem
-  // abaixo segue a daquela função -- máquina detalhada, hora-máquina, e o
-  // formulário padrão de medição -- para as duas telas nunca discordarem sobre
-  // qual é o número principal de um apontamento.
-  function medicaoResumida(a){
-    var maquinas = a.maquinas || [];
-    if (a.data_execucao && maquinas.length){
-      var total = 0, achou = false;
-      maquinas.forEach(function(m){
-        var d = m.dados || {};
-        if (d.quantidade != null){ total += Number(d.quantidade) || 0; achou = true; }
-      });
-      if (achou) return fmtNum(total) + " qtd";
+  // O NÚMERO não é calculado aqui: vem pronto do servidor, em
+  // producoes[].producao. Produção consolidada é o que vira faturamento, e
+  // BOAS_PRATICAS §2 manda recalcular no servidor -- calcular no navegador
+  // também exigiria baixar as 108 tarifas só para saber a unidade de cada linha.
+  //
+  // Aqui só se decide como mostrar. Havia antes uma medicaoResumida() que
+  // ADIVINHAVA a medida principal por heurística (máquina detalhada, depois
+  // horas, depois comprimento). Acertava por acaso: a regra real depende da
+  // unidade da tarifa, que o painel nem conhecia.
+  function producaoFormatada(prod){
+    if (!prod || prod.producao == null){
+      // Sem descrição não há unidade, e sem unidade não há fórmula. Em branco
+      // é a resposta certa -- e é o sinal de que falta o operador escolher a
+      // descrição naquele apontamento.
+      return { texto: "—", titulo: prod && !prod.descricao_atividade
+        ? "Sem descrição de tarifa: o operador ainda não escolheu o item."
+        : "Faltam medidas para calcular." };
     }
-    if (maquinas.length){
-      var horas = 0, temHora = false;
-      maquinas.forEach(function(m){
-        var d = m.dados || {};
-        if (d.hora_inicial != null && d.hora_final != null){
-          horas += (Number(d.hora_final) || 0) - (Number(d.hora_inicial) || 0);
-          temHora = true;
-        }
-      });
-      if (temHora) return fmtNum(horas) + " h";
-    }
-    if (a.comprimento_m != null) return fmtNum(a.comprimento_m) + " m";
-    if (a.profundidade_cm != null) return fmtNum(a.profundidade_cm) + " cm";
-    if (a.dmt_km_inicial != null && a.dmt_km_final != null){
-      return fmtNum(a.dmt_km_inicial) + "–" + fmtNum(a.dmt_km_final) + " km";
-    }
-    return "—";
+    var unidade = prod.unidade_tarifa || "";
+    return {
+      texto: fmtNum(Number(prod.producao)) + (unidade ? " " + unidade : ""),
+      titulo: prod.codigo_tarifa ? ("Tarifa " + prod.codigo_tarifa) : ""
+    };
   }
 
   function diasDesde(iso){
@@ -1469,8 +1513,13 @@
   }
 
   function textoBuscavelDoApontamento(ap){
+    var p = ap.prod || {};
+    // A busca cobre também o que é da LINHA (descrição, máquina, operador), e
+    // não só do apontamento: agora que cada máquina é uma linha, procurar pelo
+    // equipamento é o jeito natural de achar a produção de uma delas.
     return [ap.fazenda, ap.cliente, ap.frente, ap.encarregado,
             ap.ativ.tipo_atividade, ap.ativ.up, ap.ativ.trecho,
+            p.descricao_atividade, p.equipamento, p.operador, p.codigo_tarifa,
             ap.ativ.numero != null ? ("#" + ap.ativ.numero) : ""].join(" ").toLowerCase();
   }
 
@@ -1546,10 +1595,16 @@
       return html;
     }
 
+    // A ORDEM das colunas é decisão, não acaso. São 13, e em 1366px a tabela
+    // fica mais larga que o card -- então o que estiver à direita só aparece
+    // depois de rolar. O revisor precisa, sem rolar: qual apontamento, o que
+    // foi feito, quanto produziu e em que estado está. Frente, encarregado e
+    // UP são contexto, e vão para o fim.
     html += '<div class="card-hist-scroll"><table class="tabela-hist"><thead><tr>'+
-      '<th>Nº</th><th>Fazenda</th><th>Cliente</th><th>Frente/Equipe</th>'+
-      '<th>Data do RDO</th><th>Encarregado</th><th>Tipo de atividade</th>'+
-      '<th>Prioridade</th><th>Medição</th><th>Status</th><th></th>'+
+      '<th>Nº</th><th>Fazenda</th><th>Data do RDO</th><th>Tipo de atividade</th>'+
+      '<th>Descrição (tarifa)</th><th>Máquina / operador</th>'+
+      '<th>Produção</th><th>Status</th><th>Prioridade</th>'+
+      '<th>UP · Trecho</th><th>Frente/Equipe</th><th>Encarregado</th><th></th>'+
     '</tr></thead><tbody>';
 
     html += lista.map(function(ap){
@@ -1569,20 +1624,42 @@
             ? '<button class="btn-tabela" disabled title="'+esc(a.motivo_devolucao || "Aguardando o encarregado corrigir e reenviar pelo aplicativo.")+'">Aguardando correção</button>'
             : '<button class="btn-tabela" data-action="hist-devolver" data-id="'+esc(a.id)+'" data-numero="'+esc(a.numero == null ? "" : a.numero)+'">Devolver para correção</button>');
 
-      return '<tr'+(removido?' class="linha-removida"':'')+'>'+
-        '<td class="col-num">'+(a.numero != null ? "#"+esc(a.numero) : "—")+'</td>'+
-        '<td class="col-fazenda">'+esc(ap.fazenda || "—")+'</td>'+
-        '<td>'+esc(ap.cliente || "—")+'</td>'+
-        '<td>'+esc(ap.frente || "—")+'</td>'+
-        '<td class="col-data">'+formatarData(ap.data)+'</td>'+
-        '<td>'+esc(ap.encarregado || "—")+'</td>'+
-        '<td>'+esc(a.tipo_atividade || "—")+'</td>'+
-        '<td><span class="badge badge-'+prio.classe+'" title="'+esc(prio.motivo)+'">'+esc(prio.rotulo)+'</span></td>'+
-        '<td class="col-medicao">'+esc(medicaoResumida(a))+'</td>'+
-        '<td><span class="badge badge-'+st.classe+'"'+(st.motivo?' title="'+esc(st.motivo)+'"':'')+'>'+esc(st.rotulo)+'</span></td>'+
-        '<td class="col-acoes">'+
+      var p = ap.prod || {};
+      var prodFmt = producaoFormatada(p);
+
+      // Máquina e operador em duas linhas: são dois dados distintos e juntá-los
+      // numa só com hífen faz o nome do operador parecer parte do equipamento.
+      var maquinaHtml = p.equipamento
+        ? esc(p.equipamento) + (p.operador ? '<div class="col-sub">'+esc(p.operador)+'</div>' : '')
+        : '<span class="col-sub">todo o apontamento</span>';
+
+      var upTrecho = [p.up || a.up, p.trecho || a.trecho]
+        .filter(function(v){ return v; }).join(" · ") || "—";
+
+      // Nas linhas irmãs (mesma atividade, outra máquina) o número e a fazenda
+      // ficam em branco: repeti-los em cada linha vira uma parede de texto e
+      // esconde justamente o que muda de uma linha para a outra.
+      var repetida = !ap.primeiraDoApontamento;
+
+      return '<tr class="'+(removido?"linha-removida ":"")+(repetida?"linha-irma":"")+'">'+
+        '<td class="col-num">'+(repetida ? '' : (a.numero != null ? "#"+esc(a.numero) : "—"))+
+          (!repetida && ap.totalProducoes > 1 ? '<div class="col-sub">'+ap.totalProducoes+' linhas</div>' : '')+'</td>'+
+        '<td class="col-fazenda">'+(repetida ? '' : esc(ap.fazenda || "—"))+'</td>'+
+        '<td class="col-data">'+(repetida ? '' : formatarData(ap.data))+'</td>'+
+        '<td>'+(repetida ? '' : esc(a.tipo_atividade || "—"))+'</td>'+
+        '<td>'+(p.descricao_atividade
+                  ? esc(p.descricao_atividade)
+                  : '<span class="col-sem-descricao" title="Sem descrição não há tarifa nem unidade, e a produção não pode ser calculada.">sem descrição</span>')+'</td>'+
+        '<td>'+maquinaHtml+'</td>'+
+        '<td class="col-medicao"'+(prodFmt.titulo?' title="'+esc(prodFmt.titulo)+'"':'')+'>'+esc(prodFmt.texto)+'</td>'+
+        '<td>'+(repetida ? '' : '<span class="badge badge-'+st.classe+'"'+(st.motivo?' title="'+esc(st.motivo)+'"':'')+'>'+esc(st.rotulo)+'</span>')+'</td>'+
+        '<td>'+(repetida ? '' : '<span class="badge badge-'+prio.classe+'" title="'+esc(prio.motivo)+'">'+esc(prio.rotulo)+'</span>')+'</td>'+
+        '<td>'+esc(upTrecho)+'</td>'+
+        '<td>'+(repetida ? '' : esc(ap.frente || "—"))+'</td>'+
+        '<td>'+(repetida ? '' : esc(ap.encarregado || "—"))+'</td>'+
+        '<td class="col-acoes">'+(repetida ? '' :
           '<button class="btn-tabela" data-action="hist-abrir" data-rel="'+esc(ap.rel.id)+'">Editar</button> '+
-          botaoDevolver+
+          botaoDevolver)+
         '</td>'+
       '</tr>';
     }).join("");
