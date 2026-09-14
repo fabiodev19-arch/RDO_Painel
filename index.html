@@ -1811,6 +1811,10 @@
     }
     var eqs = (a.equipamentos||[]).map(function(e){ return esc(e.equipamento)+' ('+esc(e.operador)+')'; }).join(", ");
     return '<div class="campos">'+
+      // Só aparece quando foi preenchida: é campo opcional e novo, então a
+      // maioria dos apontamentos não a tem -- e um "—" fixo numa tela cheia de
+      // medidas faz o revisor procurar o que não existe.
+      (a.dimensao_m!=null ? '<div class="item"><label>Dimensão</label><span class="v">'+a.dimensao_m+'m</span></div>' : '')+
       '<div class="item"><label>Comprimento</label><span class="v">'+(a.comprimento_m!=null?a.comprimento_m+"m":"—")+'</span></div>'+
       '<div class="item"><label>Largura</label><span class="v">'+(a.largura_m!=null?a.largura_m+"m":"—")+'</span></div>'+
       '<div class="item"><label>Profundidade</label><span class="v">'+(a.profundidade_cm!=null?a.profundidade_cm+"cm":"—")+'</span></div>'+
@@ -2186,13 +2190,23 @@
   // lados precisam usar o texto idêntico, já que a chave da regra é
   // literalmente "Cliente:NomeDoCampo". Equipamento/Operador ficam de fora
   // de propósito -- sempre obrigatórios, sem opção de tornar opcional.
-  var CAMPOS_CONFIGURAVEIS = ["UP", "Trecho", "Comprimento", "Largura", "Profundidade", "DMT", "Tipo", "Quantidade", "Hora Inicial", "Hora Final", "Observação"];
+  var CAMPOS_CONFIGURAVEIS = ["UP", "Dimensão", "Trecho", "Comprimento", "Largura", "Profundidade", "DMT", "Tipo", "Quantidade", "Hora Inicial", "Hora Final", "Observação"];
+  // Campo novo não tem regra gravada no banco, e o padrão desta tela é
+  // "marcado" (obrigatório). Um campo recém-criado nasceria exigido em todo
+  // apontamento -- travando o envio de quem está na estrada por causa de algo
+  // que ninguém decidiu ainda para que serve. Estes nascem desmarcados, e a
+  // flag continua aqui para ser ligada por cliente quando a regra existir.
+  //
+  // O PWA tem o mesmo mapa (PADRAO_OBRIGATORIEDADE, em index.html). Os dois
+  // lados PRECISAM concordar: se divergirem, a tela mostra marcado e o
+  // aparelho trata como opcional, e ninguém entende por quê.
+  var PADRAO_OBRIGATORIEDADE = { "Dimensão": false };
   // Quais desses campos existem de verdade em cada formulário -- usado só
   // pra FILTRAR a matriz quando uma atividade específica está selecionada
   // (não faz sentido oferecer "Comprimento" pra configurar numa atividade
   // que usa o formulário Hora Máquina, que nem tem esse campo).
   var CAMPOS_POR_FORMULARIO = {
-    padrao: ["UP", "Trecho", "Comprimento", "Largura", "Profundidade", "DMT", "Observação"],
+    padrao: ["UP", "Dimensão", "Trecho", "Comprimento", "Largura", "Profundidade", "DMT", "Observação"],
     hora_maquina: ["Tipo", "Hora Inicial", "Hora Final", "Observação"],
     maquinas_detalhado: ["UP", "Trecho", "Quantidade", "Comprimento", "Largura", "Profundidade", "Hora Inicial", "Hora Final", "Observação"]
   };
@@ -2268,7 +2282,9 @@
             return '<tr><td>'+esc(campo)+'</td>'+
               clientes.map(function(c){
                 var chave = c.valor+":"+prefixoChave+campo;
-                var marcado = valorRegra("campo_obrigatorio", chave, true);
+                var padrao = Object.prototype.hasOwnProperty.call(PADRAO_OBRIGATORIEDADE, campo)
+                  ? PADRAO_OBRIGATORIEDADE[campo] : true;
+                var marcado = valorRegra("campo_obrigatorio", chave, padrao);
                 return '<td><input type="checkbox" data-chave="'+esc(chave)+'" '+(marcado?"checked":"")+'></td>';
               }).join("")+
             '</tr>';
