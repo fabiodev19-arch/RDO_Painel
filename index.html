@@ -570,6 +570,7 @@
     configAtividadeSelecionada: "",
     configBuscaDescricao: "",    // filtro da tabela de formulário por descrição
     configMapaAtividade: "",     // atividade aberta no mapeamento opcional
+    configCampoDescricao: "",    // descrição aberta em "campos visíveis por descrição"
     cadastrosPagina: 1, cadastrosTamanhoPagina: 50
   };
 
@@ -2223,6 +2224,26 @@
   // atividade. Saiu em 14/09: atividade não tem mais formulário (ver
   // configContextoAtual).
 
+  // Quais campos são ESCONDÍVEIS em cada formulário (16/09) -- eixo diferente
+  // de CAMPOS_CONFIGURAVEIS: aquele é obrigatoriedade (por cliente), este é
+  // visibilidade (por descrição). Uma tarifa por KM não usa Profundidade.
+  //
+  // Faz sentido reviver um mapa por-formulário aqui, e ele NÃO tem o mesmo
+  // problema do que foi removido em 14/09: aquele filtrava pelo formulário da
+  // ATIVIDADE, que podia não existir (36 das 49 sem regra). Este filtra pelo
+  // formulário da DESCRIÇÃO, que É bem definido -- toda descrição tem uma
+  // regra em formulario_descricao (a semente cobre as 108).
+  //
+  // Hora Máquina fica de fora de propósito: só tem Tipo e Observação, e os
+  // dois são o núcleo do formulário -- não sobra o que esconder. Hora
+  // Inicial/Final e Observação também ficam de fora nos outros dois, pelo
+  // mesmo motivo (registro central de tempo trabalhado / campo livre que
+  // raramente há motivo de esconder).
+  var CAMPOS_ESCONDIVEIS_POR_FORMULARIO = {
+    padrao: ["UP", "Dimensão", "Comprimento", "Largura", "Profundidade", "Trecho"],
+    maquinas_detalhado: ["UP", "Trecho", "Quantidade", "Comprimento", "Largura", "Profundidade"]
+  };
+
   // Compartilhado entre render e wiring -- assim o botão "marcar/desmarcar
   // coluna toda" sabe exatamente a mesma lista de campos que está na tela
   // (respeitando o filtro de atividade), sem duplicar a lógica.
@@ -2282,6 +2303,45 @@
     }).join("")+'</tbody></table></div>';
     if (!descricoesMostradas.length){
       html += '<p class="helper-text">Nenhuma descrição com esse texto.</p>';
+    }
+    html += '</div>';
+
+    // Campos visíveis por descrição (pedido do Fábio, 16/09) -- eixo
+    // diferente de "Campos obrigatórios" mais abaixo: aquele decide se um
+    // campo TRAVA o envio vazio, este decide se ele aparece na tela.
+    //
+    // Um campo ESCONDIDO nunca pode ser obrigatório: no PWA, o formulário só
+    // desenha (e só valida) os campos que camposAtividade() devolve, e um
+    // campo escondido simplesmente não entra nessa lista -- não tem como um
+    // campo invisível travar o envio, porque a validação nem olha para ele.
+    html += '<div class="config-section">';
+    html += '<div class="section-title" style="margin-top:0">Campos visíveis por descrição</div>';
+    html += '<p class="helper-text" style="margin-top:0">Escolha uma descrição para decidir quais campos aparecem no PWA quando ela é selecionada. <b>Sem nada desmarcado, todos aparecem</b> -- que é como está hoje.</p>';
+    html += '<div class="field" style="max-width:360px; margin-bottom:14px;"><label>Descrição (tarifa)</label>'+
+      '<select id="config-campo-descricao" class="filtro-campo-select" style="width:100%;">'+
+      '<option value="">Selecione uma descrição</option>'+
+      descricoes.map(function(d){
+        return '<option value="'+esc(d.valor)+'"'+(App.configCampoDescricao===d.valor?" selected":"")+'>'+esc(d.valor)+'</option>';
+      }).join("")+'</select></div>';
+
+    if (App.configCampoDescricao){
+      var formularioDaSel = valorRegra("formulario_descricao", App.configCampoDescricao, "padrao");
+      var campoLabelFormulario = (FORMULARIOS_DISPONIVEIS.filter(function(f){ return f.id === formularioDaSel; })[0] || {}).label || formularioDaSel;
+      var camposEsc = CAMPOS_ESCONDIVEIS_POR_FORMULARIO[formularioDaSel] || [];
+      var ocultosAtuais = valorRegra("campos_ocultos_descricao", App.configCampoDescricao, []) || [];
+
+      html += '<p class="helper-text" style="margin-top:0">Formulário desta descrição: <b>'+esc(campoLabelFormulario)+'</b>'+
+        (formularioDaSel === "hora_maquina" ? ' -- este formulário não tem campo escondível (só Tipo e Observação, que são o núcleo dele).' : '')+'</p>';
+
+      if (camposEsc.length){
+        html += '<div class="tabela-wrap"><table><thead><tr><th style="width:44px"></th><th>Campo</th></tr></thead><tbody>'+
+          camposEsc.map(function(campo){
+            var visivel = ocultosAtuais.indexOf(campo) === -1;
+            return '<tr><td><input type="checkbox" class="chk-campo-visivel" data-campo="'+esc(campo)+'"'+(visivel?" checked":"")+'></td>'+
+              '<td>'+esc(campo)+'</td></tr>';
+          }).join("")+
+          '</tbody></table></div>';
+      }
     }
     html += '</div>';
 
@@ -2403,6 +2463,32 @@
       App.configMapaAtividade = this.value;
       render();
     };
+
+    var selCampoDesc = document.getElementById("config-campo-descricao");
+    if (selCampoDesc) selCampoDesc.onchange = function(){
+      App.configCampoDescricao = this.value;
+      render();
+    };
+
+    // Cada checkbox representa "aparece" (marcado = visível), mas a regra
+    // gravada é a lista do que fica ESCONDIDO -- é a lista vazia por padrão
+    // que faz "nada configurado ainda" e "tudo desmarcado por escolha"
+    // significarem a mesma coisa seguramente (tudo visível). Por isso o
+    // valor salvo é sempre recalculado a partir do que está DESMARCADO na
+    // tela, nunca acumulado sobre o que veio do banco.
+    document.querySelectorAll(".chk-campo-visivel").forEach(function(chk){
+      chk.onchange = function(){
+        if (!App.configCampoDescricao) return;
+        var ocultos = [];
+        document.querySelectorAll(".chk-campo-visivel").forEach(function(c){
+          if (!c.checked) ocultos.push(c.getAttribute("data-campo"));
+        });
+        salvarRegra("campos_ocultos_descricao", App.configCampoDescricao, ocultos).then(function(ok){
+          if (ok) showToast(ocultos.length ? (ocultos.length+" campo(s) escondido(s) para essa descrição.")
+                                           : "Nenhum escondido: todos os campos aparecem.");
+        });
+      };
+    });
 
     // Marcar/desmarcar uma descrição no mapeamento da atividade. O valor da
     // regra é a LISTA inteira, então cada clique regrava a lista -- por isso
