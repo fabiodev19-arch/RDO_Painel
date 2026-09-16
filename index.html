@@ -284,12 +284,63 @@
      enormes entre si, dando a sensação de "informação esparsa no meio de
      muito espaço vazio". Aqui a tabela só ocupa o que o conteúdo pede. */
   .tabela-estreita{max-width:640px;}
-  /* 108 descrições não cabem na tela. Sem altura máxima, a tabela empurra
-     todo o resto das Configurações para fora da primeira dobra e o mapeamento
-     que vem depois dela fica invisível. */
-  .tabela-descricoes{max-height:420px; overflow-y:auto; max-width:820px;}
-  .tabela-descricoes table{width:100%;}
-  .tabela-descricoes thead th{position:sticky; top:0; background:var(--card); z-index:1;}
+
+  /* Guias INTERNAS de Configurações (17/09) -- mesma fórmula visual das
+     abas principais do topo (.abas), reaproveitada em escala menor. Pedido
+     do Fábio: "Campos obrigatórios por cliente" ganhar sua própria guia, em
+     vez de dividir a largura da tela com "Descrição (tarifa)". */
+  .config-guias{display:flex; align-items:center; gap:2px; border-bottom:1px solid var(--border); margin-bottom:18px;}
+  .config-guias button{
+    background:none; border:none; border-bottom:2px solid transparent;
+    color:var(--text-dim); font-size:13.5px; font-weight:600; padding:10px 4px;
+    margin-right:22px; white-space:nowrap;
+  }
+  .config-guias button.active{color:var(--brand); border-bottom-color:var(--brand);}
+  html[data-theme="light"] .config-guias button.active{color:var(--brand-dark); border-bottom-color:var(--brand-dark);}
+  .config-guias button:hover:not(.active){color:var(--text);}
+
+  /* Cartão de tabela em LARGURA TOTAL -- mesma fórmula do Histórico
+     (.card-hist), reaproveitada aqui em vez de inventada de novo: cabeçalho
+     preso no topo ao rolar, título separado por borda, linha destacada ao
+     passar o mouse. "Padrão vendável" = usar o mesmo padrão que o resto do
+     app já usa, não um terceiro estilo. */
+  .card-config{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); overflow:hidden;
+  }
+  .card-config-head{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:14px 18px; border-bottom:1px solid var(--border);
+  }
+  .card-config-head h2{font-size:14.5px; margin:0; font-weight:700;}
+  .card-config-head .contagem{font-size:12.5px; color:var(--text-dim);}
+  .card-config-scroll{max-height:calc(100vh - 360px); overflow:auto;}
+  .tabela-config{width:100%; border-collapse:collapse;}
+  .tabela-config th{
+    position:sticky; top:0; z-index:1; background:var(--surface);
+    text-align:left; font-size:11px; font-weight:700; color:var(--text-dim);
+    text-transform:uppercase; letter-spacing:.04em; white-space:nowrap;
+    padding:11px 14px; border-bottom:1px solid var(--border);
+  }
+  .tabela-config td{
+    padding:11px 14px; font-size:13.5px; border-bottom:1px solid var(--border);
+    vertical-align:middle;
+  }
+  .tabela-config tbody tr:last-child td{border-bottom:none;}
+  .tabela-config tbody tr:hover{background:var(--surface-2);}
+  .tabela-config td.col-descricao{max-width:420px;}
+  /* Coluna "Campo" grudada à esquerda na matriz de obrigatoriedade -- com
+     muitos clientes (o app já fala em Arauco + Suzano no futuro) a tabela
+     rola de lado, e sem isso o revisor perde de vista qual campo é qual. */
+  .tabela-config td.col-campo, .tabela-config th.col-campo{
+    position:sticky; left:0; z-index:2; background:var(--surface);
+    border-right:1px solid var(--border); font-weight:600;
+  }
+  .tabela-config th.col-campo{z-index:3;}
+  .tabela-config tbody tr:hover td.col-campo{background:var(--surface-2);}
+  .tabela-config th.col-cliente{text-align:center; min-width:150px;}
+  .tabela-config td.col-cliente{text-align:center;}
+
   /* Coluna "Campos": botão discreto (mesmo peso visual do seletor de
      Formulário ao lado) e o texto que substitui o botão quando o
      formulário não tem nada escondível (Hora Máquina). */
@@ -309,11 +360,6 @@
   .campos-visiveis-inline label{
     display:flex; align-items:center; gap:6px; font-size:12.5px; cursor:pointer; white-space:nowrap;
   }
-  .tabela-matriz-scroll{overflow-x:auto;}
-  .tabela-matriz{width:auto;}
-  .tabela-matriz th, .tabela-matriz td{white-space:nowrap;}
-  .tabela-matriz th:first-child, .tabela-matriz td:first-child{min-width:150px; white-space:normal;}
-  .tabela-matriz th:not(:first-child), .tabela-matriz td:not(:first-child){width:130px; text-align:center;}
   .th-cliente{margin-bottom:6px;}
   .th-acoes-coluna{display:flex; flex-direction:column; gap:3px;}
   .btn-coluna{
@@ -589,6 +635,7 @@
     configAtividadeSelecionada: "",
     configBuscaDescricao: "",    // filtro da tabela de descrição (tarifa)
     configLinhaExpandida: "",    // descrição com a coluna "Campos" aberta
+    configGuia: "descricao",     // guia ativa dentro de Configurações
     cadastrosPagina: 1, cadastrosTamanhoPagina: 50
   };
 
@@ -2277,50 +2324,68 @@
     return { atividadeSel: atividadeSel, prefixoChave: prefixoChave, camposMostrados: CAMPOS_CONFIGURAVEIS };
   }
 
+  // Duas guias INTERNAS (17/09, pedido do Fábio). Antes as duas seções
+  // dividiam a largura da tela lado a lado (flex-wrap) -- "Descrição
+  // (tarifa)" precisa da tabela cheia (108 linhas, 3 colunas, uma delas
+  // expansível), e "Campos obrigatórios por cliente" ainda não tinha o
+  // "padrão vendável/profissional... para uso em larga escala" que o resto
+  // do app já tem (o Histórico, por exemplo). As duas ganham sua própria
+  // guia e a largura inteira da tela.
+  var CONFIG_GUIAS = [
+    { id:"descricao", label:"Descrição (tarifa)" },
+    { id:"obrigatoriedade", label:"Campos obrigatórios por cliente" }
+  ];
+
   function renderTelaConfiguracoes(){
     if (!App.cadastrosCarregados || !App.regrasCarregadas){
       return '<div class="spinner-wrap"><div class="spinner"></div></div>';
     }
-    var atividades = App.cadastrosAdmin.filter(function(c){ return c.categoria === "tipo_atividade" && c.ativo; });
-    var clientes = App.cadastrosAdmin.filter(function(c){ return c.categoria === "cliente" && c.ativo; });
+    var guiaAtual = App.configGuia || "descricao";
+    var html = '<div class="config-guias">'+
+      CONFIG_GUIAS.map(function(g){
+        return '<button data-config-guia="'+g.id+'" class="'+(guiaAtual===g.id?"active":"")+'">'+esc(g.label)+'</button>';
+      }).join("")+
+    '</div>';
 
-    var html = '<div class="config-row">';
+    html += guiaAtual === "obrigatoriedade" ? renderConfigObrigatoriedade() : renderConfigDescricao();
+    return html;
+  }
 
-    // QUEM DECIDE O FORMULÁRIO É A DESCRIÇÃO, não a atividade (14/09).
-    //
-    // Antes esta tabela listava as 49 atividades. O problema, medido nas 2.126
-    // linhas da planilha: uma atividade reúne descrições que pedem formulários
-    // diferentes -- dentro de DRENAGENS IMPLANTAÇÃO convivem MINI CURVA (obra)
-    // e PÁ CARREGADEIRA (hora-máquina). Um seletor por atividade não cobria os
-    // dois, e 36 das 49 nem tinham regra: caíam no padrão por omissão.
-    //
-    // São 108 linhas agora, por isso a busca -- sem ela a tabela é inutilizável.
+  // QUEM DECIDE O FORMULÁRIO É A DESCRIÇÃO, não a atividade (14/09). Medido
+  // nas 2.126 linhas da planilha: uma atividade reúne descrições que pedem
+  // formulários diferentes -- dentro de DRENAGENS IMPLANTAÇÃO convivem MINI
+  // CURVA (obra) e PÁ CARREGADEIRA (hora-máquina).
+  //
+  // "Formulário por descrição" e "Campos visíveis por descrição" viraram
+  // UMA tabela em 16/09 (as duas giravam em torno da mesma chave), e ela
+  // ganhou a guia inteira em 17/09, em vez de dividir a largura com a
+  // matriz de obrigatoriedade -- 108 linhas cabem melhor com espaço de
+  // verdade. O mapeamento "Descrições por atividade" que existia aqui foi
+  // REMOVIDO (14/09→16/09, pedido do Fábio: "não faz sentido ter").
+  function renderConfigDescricao(){
     var descricoes = App.cadastrosAdmin.filter(function(c){ return c.categoria === "descricao_atividade" && c.ativo; });
     var buscaForm = normalizarBuscaPainel(App.configBuscaDescricao || "");
     var descricoesMostradas = buscaForm
       ? descricoes.filter(function(d){ return normalizarBuscaPainel(d.valor).indexOf(buscaForm) !== -1; })
       : descricoes;
 
-    // UMA SEÇÃO SÓ para as duas configurações que giram em torno da mesma
-    // chave -- a descrição (16/09, a pedido do Fábio: "Formulário por
-    // descrição" e "Campos visíveis por descrição" tinham cada uma seu
-    // próprio seletor de descrição, sua própria busca, sua própria tabela --
-    // duas telas para editar duas propriedades da MESMA coisa. Agora é uma
-    // tabela, uma busca, e a coluna "Campos" expande dentro da própria linha.
-    //
-    // O mapeamento "Descrições por atividade" que existia aqui (14/09) foi
-    // REMOVIDO nesta mudança (pedido do Fábio: "não faz sentido ter"). Não
-    // sobrou vestígio: nem REGRAS.descricoes_da_atividade é mais lido no PWA
-    // (ver descricoesDisponiveis, removida de lá).
-    html += '<div class="config-section">';
-    html += '<div class="section-title" style="margin-top:0">Descrição (tarifa)</div>';
-    html += '<p class="helper-text" style="margin-top:0">Define, por descrição, qual formulário o PWA mostra e quais campos aparecem nele. Um campo escondido nunca trava o envio -- a validação nem chega a olhar para ele.</p>';
+    var html = '<p class="helper-text" style="margin-top:0">Define, por descrição, qual formulário o PWA mostra e quais campos aparecem nele. Um campo escondido nunca trava o envio -- a validação nem chega a olhar para ele.</p>';
     html += '<div class="field" style="max-width:360px; margin-bottom:12px;">'+
       '<input type="text" id="config-busca-descricao" class="filtro-campo-select" style="width:100%;" '+
       'placeholder="Buscar descrição..." value="'+esc(App.configBuscaDescricao||"")+'"></div>';
-    html += '<p class="helper-text" style="margin-top:0">'+
-      descricoesMostradas.length+' de '+descricoes.length+' descrições</p>';
-    html += '<div class="tabela-wrap tabela-descricoes"><table><thead><tr><th>Descrição (tarifa)</th><th>Formulário</th><th>Campos</th></tr></thead><tbody>';
+
+    html += '<div class="card-config">';
+    html += '<div class="card-config-head"><h2>Descrição (tarifa)</h2>'+
+      '<span class="contagem" id="config-contador-descricoes">'+descricoesMostradas.length+' de '+descricoes.length+' descrições</span></div>';
+
+    if (!descricoesMostradas.length){
+      html += '<div class="empty-state">Nenhuma descrição com esse texto.</div></div>';
+      return html;
+    }
+
+    html += '<div class="card-config-scroll tabela-descricoes"><table class="tabela-config"><thead><tr>'+
+      '<th>Descrição (tarifa)</th><th>Formulário</th><th>Campos</th>'+
+    '</tr></thead><tbody>';
     html += descricoesMostradas.map(function(d){
       var formularioAtual = valorRegra("formulario_descricao", d.valor, "padrao");
       var camposEsc = CAMPOS_ESCONDIVEIS_POR_FORMULARIO[formularioAtual] || [];
@@ -2345,21 +2410,21 @@
         }
       }
 
-      return '<tr data-descricao="'+esc(d.valor)+'"><td>'+esc(d.valor)+'</td><td>'+
+      return '<tr data-descricao="'+esc(d.valor)+'"><td class="col-descricao">'+esc(d.valor)+'</td><td>'+
         '<select class="filtro-campo-select" data-descricao="'+esc(d.valor)+'">'+
         FORMULARIOS_DISPONIVEIS.map(function(f){
           return '<option value="'+f.id+'"'+(formularioAtual===f.id?" selected":"")+'>'+f.label+'</option>';
         }).join("")+
         '</select></td><td>'+celulaCampos+'</td></tr>';
-    }).join("")+'</tbody></table></div>';
-    if (!descricoesMostradas.length){
-      html += '<p class="helper-text">Nenhuma descrição com esse texto.</p>';
-    }
-    html += '</div>';
+    }).join("")+'</tbody></table></div></div>';
+    return html;
+  }
 
-    html += '<div class="config-section">';
-    html += '<div class="section-title" style="margin-top:0">Campos obrigatórios por cliente</div>';
-    html += '<p class="helper-text" style="margin-top:0">Marcado = obrigatório no PWA para esse cliente. Sem marcação em nenhum cliente, o campo fica obrigatório por padrão. Escolha uma atividade específica pra abrir uma exceção só pra ela -- sem escolher, a regra é "Geral" e vale pra qualquer atividade que tenha aquele campo.</p>';
+  function renderConfigObrigatoriedade(){
+    var atividades = App.cadastrosAdmin.filter(function(c){ return c.categoria === "tipo_atividade" && c.ativo; });
+    var clientes = App.cadastrosAdmin.filter(function(c){ return c.categoria === "cliente" && c.ativo; });
+
+    var html = '<p class="helper-text" style="margin-top:0">Marcado = obrigatório no PWA para esse cliente. Sem marcação em nenhum cliente, o campo fica obrigatório por padrão. Escolha uma atividade específica pra abrir uma exceção só pra ela -- sem escolher, a regra é "Geral" e vale pra qualquer atividade que tenha aquele campo.</p>';
     html += '<div class="field" style="max-width:320px; margin-bottom:14px;"><label>Aplicar para</label>'+
       '<select id="config-atividade-select" class="filtro-campo-select" style="width:100%;">'+
       '<option value=""'+(App.configAtividadeSelecionada===""?" selected":"")+'>Geral (todas as atividades)</option>'+
@@ -2369,42 +2434,52 @@
       '</select></div>';
 
     if (!clientes.length){
-      html += '<div class="empty-state">Cadastre ao menos um cliente antes de configurar isso.</div>';
-    } else {
-      var ctx = configContextoAtual();
-      var prefixoChave = ctx.prefixoChave;
-      var camposMostrados = ctx.camposMostrados;
-
-      if (!camposMostrados.length){
-        html += '<div class="empty-state">Essa atividade não tem campo configurável (formulário sem campos opcionais).</div>';
-      } else {
-        html += '<div class="tabela-wrap tabela-matriz-scroll"><table class="tabela-matriz"><thead><tr><th>Campo</th>'+
-          clientes.map(function(c){
-            return '<th><div class="th-cliente">'+esc(c.valor)+'</div>'+
-              '<div class="th-acoes-coluna">'+
-                '<button class="btn-coluna" data-cliente="'+esc(c.valor)+'" data-marcar="true">Marcar todos</button>'+
-                '<button class="btn-coluna" data-cliente="'+esc(c.valor)+'" data-marcar="false">Desmarcar todos</button>'+
-              '</div></th>';
-          }).join("")+
-          '</tr></thead><tbody>'+
-          camposMostrados.map(function(campo){
-            return '<tr><td>'+esc(campo)+'</td>'+
-              clientes.map(function(c){
-                var chave = c.valor+":"+prefixoChave+campo;
-                var padrao = Object.prototype.hasOwnProperty.call(PADRAO_OBRIGATORIEDADE, campo)
-                  ? PADRAO_OBRIGATORIEDADE[campo] : true;
-                var marcado = valorRegra("campo_obrigatorio", chave, padrao);
-                return '<td><input type="checkbox" data-chave="'+esc(chave)+'" '+(marcado?"checked":"")+'></td>';
-              }).join("")+
-            '</tr>';
-          }).join("")+
-          '</tbody></table></div>';
-      }
+      return html + '<div class="empty-state">Cadastre ao menos um cliente antes de configurar isso.</div>';
     }
-    html += '</div></div>';
+
+    var ctx = configContextoAtual();
+    var prefixoChave = ctx.prefixoChave;
+    var camposMostrados = ctx.camposMostrados;
+
+    html += '<div class="card-config">';
+    html += '<div class="card-config-head"><h2>Campos obrigatórios por cliente</h2>'+
+      '<span class="contagem">'+camposMostrados.length+' campo(s) · '+clientes.length+' cliente(s)</span></div>';
+
+    if (!camposMostrados.length){
+      return html + '<div class="empty-state">Essa atividade não tem campo configurável (formulário sem campos opcionais).</div></div>';
+    }
+
+    html += '<div class="card-config-scroll"><table class="tabela-config"><thead><tr><th class="col-campo">Campo</th>'+
+      clientes.map(function(c){
+        return '<th class="col-cliente"><div class="th-cliente">'+esc(c.valor)+'</div>'+
+          '<div class="th-acoes-coluna">'+
+            '<button class="btn-coluna" data-cliente="'+esc(c.valor)+'" data-marcar="true">Marcar todos</button>'+
+            '<button class="btn-coluna" data-cliente="'+esc(c.valor)+'" data-marcar="false">Desmarcar todos</button>'+
+          '</div></th>';
+      }).join("")+
+      '</tr></thead><tbody>'+
+      camposMostrados.map(function(campo){
+        return '<tr><td class="col-campo">'+esc(campo)+'</td>'+
+          clientes.map(function(c){
+            var chave = c.valor+":"+prefixoChave+campo;
+            var padrao = Object.prototype.hasOwnProperty.call(PADRAO_OBRIGATORIEDADE, campo)
+              ? PADRAO_OBRIGATORIEDADE[campo] : true;
+            var marcado = valorRegra("campo_obrigatorio", chave, padrao);
+            return '<td class="col-cliente"><input type="checkbox" data-chave="'+esc(chave)+'" '+(marcado?"checked":"")+'></td>';
+          }).join("")+
+        '</tr>';
+      }).join("")+
+      '</tbody></table></div></div>';
     return html;
   }
   function ligarTelaConfiguracoes(){
+    document.querySelectorAll("[data-config-guia]").forEach(function(btn){
+      btn.onclick = function(){
+        App.configGuia = btn.getAttribute("data-config-guia");
+        render();
+      };
+    });
+
     var selAtividade = document.getElementById("config-atividade-select");
     if (selAtividade) selAtividade.onchange = function(){
       App.configAtividadeSelecionada = this.value;
@@ -2436,7 +2511,14 @@
         tr.hidden = !casa;
         if (casa) vistas++;
       });
-      var contador = buscaDesc.parentNode.nextElementSibling;
+      // ID explícito (17/09) -- até então este contador era achado por
+      // buscaDesc.parentNode.nextElementSibling, uma suposição de estrutura
+      // do DOM. Quando o contador se mudou para dentro de .card-config-head
+      // (mesma mudança que criou as guias), esse "próximo irmão" passou a
+      // ser o CARD INTEIRO -- e a linha sobrescrevia o card (tabela
+      // incluída) com o texto do contador, apagando a tabela do DOM. Achado
+      // rodando a ferramenta de teste, não em produção.
+      var contador = document.getElementById("config-contador-descricoes");
       if (contador) contador.textContent = vistas + " de " + tabela.rows.length + " descrições";
     };
 
