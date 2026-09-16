@@ -287,9 +287,28 @@
   /* 108 descrições não cabem na tela. Sem altura máxima, a tabela empurra
      todo o resto das Configurações para fora da primeira dobra e o mapeamento
      que vem depois dela fica invisível. */
-  .tabela-descricoes{max-height:420px; overflow-y:auto; max-width:720px;}
+  .tabela-descricoes{max-height:420px; overflow-y:auto; max-width:820px;}
   .tabela-descricoes table{width:100%;}
   .tabela-descricoes thead th{position:sticky; top:0; background:var(--card); z-index:1;}
+  /* Coluna "Campos": botão discreto (mesmo peso visual do seletor de
+     Formulário ao lado) e o texto que substitui o botão quando o
+     formulário não tem nada escondível (Hora Máquina). */
+  .btn-campos-visiveis{
+    padding:6px 10px; border-radius:var(--radius-sm); border:1px solid var(--border);
+    background:var(--surface); color:var(--text); font-size:12px; cursor:pointer; white-space:nowrap;
+  }
+  .btn-campos-visiveis:hover{background:var(--surface-3);}
+  .helper-text-inline{color:var(--text-dim); font-size:12px;}
+  /* A lista de checkboxes abre DENTRO da própria célula, empilhada, em vez
+     de uma segunda linha -- assim a busca (que esconde <tr> inteiras)
+     esconde a lista junto, sem precisar saber que ela existe. */
+  .campos-visiveis-inline{
+    display:flex; flex-direction:column; gap:4px; margin-top:8px;
+    padding:8px 10px; border-radius:var(--radius-sm); background:var(--surface);
+  }
+  .campos-visiveis-inline label{
+    display:flex; align-items:center; gap:6px; font-size:12.5px; cursor:pointer; white-space:nowrap;
+  }
   .tabela-matriz-scroll{overflow-x:auto;}
   .tabela-matriz{width:auto;}
   .tabela-matriz th, .tabela-matriz td{white-space:nowrap;}
@@ -568,9 +587,8 @@
     cadastrosAdmin: [], categoriaAtiva: "cliente", cadastrosCarregados: false,
     regrasAdmin: [], regrasCarregadas: false,
     configAtividadeSelecionada: "",
-    configBuscaDescricao: "",    // filtro da tabela de formulário por descrição
-    configMapaAtividade: "",     // atividade aberta no mapeamento opcional
-    configCampoDescricao: "",    // descrição aberta em "campos visíveis por descrição"
+    configBuscaDescricao: "",    // filtro da tabela de descrição (tarifa)
+    configLinhaExpandida: "",    // descrição com a coluna "Campos" aberta
     cadastrosPagina: 1, cadastrosTamanhoPagina: 50
   };
 
@@ -2283,95 +2301,59 @@
       ? descricoes.filter(function(d){ return normalizarBuscaPainel(d.valor).indexOf(buscaForm) !== -1; })
       : descricoes;
 
+    // UMA SEÇÃO SÓ para as duas configurações que giram em torno da mesma
+    // chave -- a descrição (16/09, a pedido do Fábio: "Formulário por
+    // descrição" e "Campos visíveis por descrição" tinham cada uma seu
+    // próprio seletor de descrição, sua própria busca, sua própria tabela --
+    // duas telas para editar duas propriedades da MESMA coisa. Agora é uma
+    // tabela, uma busca, e a coluna "Campos" expande dentro da própria linha.
+    //
+    // O mapeamento "Descrições por atividade" que existia aqui (14/09) foi
+    // REMOVIDO nesta mudança (pedido do Fábio: "não faz sentido ter"). Não
+    // sobrou vestígio: nem REGRAS.descricoes_da_atividade é mais lido no PWA
+    // (ver descricoesDisponiveis, removida de lá).
     html += '<div class="config-section">';
-    html += '<div class="section-title" style="margin-top:0">Formulário por descrição (tarifa)</div>';
-    html += '<p class="helper-text" style="margin-top:0">Define qual formulário o PWA de campo mostra quando essa descrição é escolhida. A atividade não influencia o formulário -- as duas escolhas são livres.</p>';
+    html += '<div class="section-title" style="margin-top:0">Descrição (tarifa)</div>';
+    html += '<p class="helper-text" style="margin-top:0">Define, por descrição, qual formulário o PWA mostra e quais campos aparecem nele. Um campo escondido nunca trava o envio -- a validação nem chega a olhar para ele.</p>';
     html += '<div class="field" style="max-width:360px; margin-bottom:12px;">'+
       '<input type="text" id="config-busca-descricao" class="filtro-campo-select" style="width:100%;" '+
       'placeholder="Buscar descrição..." value="'+esc(App.configBuscaDescricao||"")+'"></div>';
     html += '<p class="helper-text" style="margin-top:0">'+
       descricoesMostradas.length+' de '+descricoes.length+' descrições</p>';
-    html += '<div class="tabela-wrap tabela-estreita tabela-descricoes"><table><thead><tr><th>Descrição (tarifa)</th><th>Formulário</th></tr></thead><tbody>';
+    html += '<div class="tabela-wrap tabela-descricoes"><table><thead><tr><th>Descrição (tarifa)</th><th>Formulário</th><th>Campos</th></tr></thead><tbody>';
     html += descricoesMostradas.map(function(d){
-      var atual = valorRegra("formulario_descricao", d.valor, "padrao");
-      return '<tr><td>'+esc(d.valor)+'</td><td>'+
+      var formularioAtual = valorRegra("formulario_descricao", d.valor, "padrao");
+      var camposEsc = CAMPOS_ESCONDIVEIS_POR_FORMULARIO[formularioAtual] || [];
+      var ocultosAtuais = valorRegra("campos_ocultos_descricao", d.valor, []) || [];
+      var expandida = App.configLinhaExpandida === d.valor;
+
+      var celulaCampos;
+      if (!camposEsc.length){
+        celulaCampos = '<span class="helper-text-inline">núcleo do formulário</span>';
+      } else {
+        celulaCampos = '<button type="button" class="btn-campos-visiveis" data-descricao="'+esc(d.valor)+'">'+
+          (ocultosAtuais.length ? ocultosAtuais.length+' oculto(s)' : 'Todos visíveis')+
+          (expandida ? ' ▲' : ' ▼')+'</button>';
+        if (expandida){
+          celulaCampos += '<div class="campos-visiveis-inline">'+
+            camposEsc.map(function(campo){
+              var visivel = ocultosAtuais.indexOf(campo) === -1;
+              return '<label><input type="checkbox" class="chk-campo-visivel" '+
+                'data-descricao="'+esc(d.valor)+'" data-campo="'+esc(campo)+'"'+(visivel?" checked":"")+'> '+esc(campo)+'</label>';
+            }).join("")+
+          '</div>';
+        }
+      }
+
+      return '<tr data-descricao="'+esc(d.valor)+'"><td>'+esc(d.valor)+'</td><td>'+
         '<select class="filtro-campo-select" data-descricao="'+esc(d.valor)+'">'+
         FORMULARIOS_DISPONIVEIS.map(function(f){
-          return '<option value="'+f.id+'"'+(atual===f.id?" selected":"")+'>'+f.label+'</option>';
+          return '<option value="'+f.id+'"'+(formularioAtual===f.id?" selected":"")+'>'+f.label+'</option>';
         }).join("")+
-        '</select></td></tr>';
+        '</select></td><td>'+celulaCampos+'</td></tr>';
     }).join("")+'</tbody></table></div>';
     if (!descricoesMostradas.length){
       html += '<p class="helper-text">Nenhuma descrição com esse texto.</p>';
-    }
-    html += '</div>';
-
-    // Campos visíveis por descrição (pedido do Fábio, 16/09) -- eixo
-    // diferente de "Campos obrigatórios" mais abaixo: aquele decide se um
-    // campo TRAVA o envio vazio, este decide se ele aparece na tela.
-    //
-    // Um campo ESCONDIDO nunca pode ser obrigatório: no PWA, o formulário só
-    // desenha (e só valida) os campos que camposAtividade() devolve, e um
-    // campo escondido simplesmente não entra nessa lista -- não tem como um
-    // campo invisível travar o envio, porque a validação nem olha para ele.
-    html += '<div class="config-section">';
-    html += '<div class="section-title" style="margin-top:0">Campos visíveis por descrição</div>';
-    html += '<p class="helper-text" style="margin-top:0">Escolha uma descrição para decidir quais campos aparecem no PWA quando ela é selecionada. <b>Sem nada desmarcado, todos aparecem</b> -- que é como está hoje.</p>';
-    html += '<div class="field" style="max-width:360px; margin-bottom:14px;"><label>Descrição (tarifa)</label>'+
-      '<select id="config-campo-descricao" class="filtro-campo-select" style="width:100%;">'+
-      '<option value="">Selecione uma descrição</option>'+
-      descricoes.map(function(d){
-        return '<option value="'+esc(d.valor)+'"'+(App.configCampoDescricao===d.valor?" selected":"")+'>'+esc(d.valor)+'</option>';
-      }).join("")+'</select></div>';
-
-    if (App.configCampoDescricao){
-      var formularioDaSel = valorRegra("formulario_descricao", App.configCampoDescricao, "padrao");
-      var campoLabelFormulario = (FORMULARIOS_DISPONIVEIS.filter(function(f){ return f.id === formularioDaSel; })[0] || {}).label || formularioDaSel;
-      var camposEsc = CAMPOS_ESCONDIVEIS_POR_FORMULARIO[formularioDaSel] || [];
-      var ocultosAtuais = valorRegra("campos_ocultos_descricao", App.configCampoDescricao, []) || [];
-
-      html += '<p class="helper-text" style="margin-top:0">Formulário desta descrição: <b>'+esc(campoLabelFormulario)+'</b>'+
-        (formularioDaSel === "hora_maquina" ? ' -- este formulário não tem campo escondível (só Tipo e Observação, que são o núcleo dele).' : '')+'</p>';
-
-      if (camposEsc.length){
-        html += '<div class="tabela-wrap"><table><thead><tr><th style="width:44px"></th><th>Campo</th></tr></thead><tbody>'+
-          camposEsc.map(function(campo){
-            var visivel = ocultosAtuais.indexOf(campo) === -1;
-            return '<tr><td><input type="checkbox" class="chk-campo-visivel" data-campo="'+esc(campo)+'"'+(visivel?" checked":"")+'></td>'+
-              '<td>'+esc(campo)+'</td></tr>';
-          }).join("")+
-          '</tbody></table></div>';
-      }
-    }
-    html += '</div>';
-
-    // Mapeamento opcional atividade -> descrições (pedido do Fábio, 14/09).
-    //
-    // Hoje as duas escolhas são livres e devem continuar assim. Isto existe
-    // para o dia em que ele quiser amarrar: sem nada marcado, o PWA abre a
-    // lista inteira; com algo marcado, abre só o que está marcado. A tela
-    // deixa isso explícito para ninguém achar que "nada marcado" trava o campo.
-    html += '<div class="config-section">';
-    html += '<div class="section-title" style="margin-top:0">Descrições por atividade (opcional)</div>';
-    html += '<p class="helper-text" style="margin-top:0">Serve para restringir a lista que o operador vê. <b>Sem nada marcado, ele vê todas as descrições</b> -- que é como está hoje. Marque apenas se quiser amarrar uma atividade a um conjunto.</p>';
-    html += '<div class="field" style="max-width:360px; margin-bottom:14px;"><label>Atividade</label>'+
-      '<select id="config-mapa-atividade" class="filtro-campo-select" style="width:100%;">'+
-      '<option value="">Selecione uma atividade</option>'+
-      atividades.map(function(a){
-        return '<option value="'+esc(a.valor)+'"'+(App.configMapaAtividade===a.valor?" selected":"")+'>'+esc(a.valor)+'</option>';
-      }).join("")+'</select></div>';
-
-    if (App.configMapaAtividade){
-      var marcadas = valorRegra("descricoes_da_atividade", App.configMapaAtividade, []) || [];
-      html += '<p class="helper-text" style="margin-top:0">'+
-        (marcadas.length ? marcadas.length+' marcada(s): o operador verá só essas.'
-                         : 'Nenhuma marcada: o operador vê todas as 108.')+'</p>';
-      html += '<div class="tabela-wrap tabela-descricoes"><table><thead><tr><th style="width:44px"></th><th>Descrição</th></tr></thead><tbody>';
-      html += descricoes.map(function(d){
-        var m = marcadas.indexOf(d.valor) !== -1;
-        return '<tr><td><input type="checkbox" class="chk-mapa-descricao" data-descricao="'+esc(d.valor)+'"'+(m?" checked":"")+'></td>'+
-          '<td>'+esc(d.valor)+'</td></tr>';
-      }).join("")+'</tbody></table></div>';
     }
     html += '</div>';
 
@@ -2458,52 +2440,35 @@
       if (contador) contador.textContent = vistas + " de " + tabela.rows.length + " descrições";
     };
 
-    var selMapa = document.getElementById("config-mapa-atividade");
-    if (selMapa) selMapa.onchange = function(){
-      App.configMapaAtividade = this.value;
-      render();
-    };
-
-    var selCampoDesc = document.getElementById("config-campo-descricao");
-    if (selCampoDesc) selCampoDesc.onchange = function(){
-      App.configCampoDescricao = this.value;
-      render();
-    };
+    // Expande/recolhe a lista de campos DENTRO da própria linha -- é o botão
+    // que substitui o seletor separado que existia antes (16/09). Um só
+    // expandido por vez (o mesmo padrão do mapeamento antigo), guardado no
+    // App para sobreviver ao render() que toda gravação dispara.
+    document.querySelectorAll(".btn-campos-visiveis").forEach(function(btn){
+      btn.onclick = function(){
+        var descricao = btn.getAttribute("data-descricao");
+        App.configLinhaExpandida = (App.configLinhaExpandida === descricao) ? "" : descricao;
+        render();
+      };
+    });
 
     // Cada checkbox representa "aparece" (marcado = visível), mas a regra
     // gravada é a lista do que fica ESCONDIDO -- é a lista vazia por padrão
     // que faz "nada configurado ainda" e "tudo desmarcado por escolha"
     // significarem a mesma coisa seguramente (tudo visível). Por isso o
     // valor salvo é sempre recalculado a partir do que está DESMARCADO na
-    // tela, nunca acumulado sobre o que veio do banco.
+    // MESMA linha (data-descricao no próprio checkbox, não num estado à
+    // parte) -- nunca acumulado sobre o que veio do banco.
     document.querySelectorAll(".chk-campo-visivel").forEach(function(chk){
       chk.onchange = function(){
-        if (!App.configCampoDescricao) return;
+        var descricao = chk.getAttribute("data-descricao");
         var ocultos = [];
-        document.querySelectorAll(".chk-campo-visivel").forEach(function(c){
+        document.querySelectorAll('.chk-campo-visivel[data-descricao="'+CSS.escape(descricao)+'"]').forEach(function(c){
           if (!c.checked) ocultos.push(c.getAttribute("data-campo"));
         });
-        salvarRegra("campos_ocultos_descricao", App.configCampoDescricao, ocultos).then(function(ok){
+        salvarRegra("campos_ocultos_descricao", descricao, ocultos).then(function(ok){
           if (ok) showToast(ocultos.length ? (ocultos.length+" campo(s) escondido(s) para essa descrição.")
                                            : "Nenhum escondido: todos os campos aparecem.");
-        });
-      };
-    });
-
-    // Marcar/desmarcar uma descrição no mapeamento da atividade. O valor da
-    // regra é a LISTA inteira, então cada clique regrava a lista -- por isso
-    // ela é montada a partir do que está marcado na tela, e não incrementada
-    // sobre o que veio do banco (que pode estar defasado).
-    document.querySelectorAll(".chk-mapa-descricao").forEach(function(chk){
-      chk.onchange = function(){
-        if (!App.configMapaAtividade) return;
-        var marcadas = [];
-        document.querySelectorAll(".chk-mapa-descricao").forEach(function(c){
-          if (c.checked) marcadas.push(c.getAttribute("data-descricao"));
-        });
-        salvarRegra("descricoes_da_atividade", App.configMapaAtividade, marcadas).then(function(ok){
-          if (ok) showToast(marcadas.length ? (marcadas.length+" descrição(ões) para essa atividade.")
-                                            : "Nenhuma marcada: o operador vê todas.");
         });
       };
     });
