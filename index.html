@@ -450,8 +450,14 @@
   .cad-sidebar-item.active{background:var(--brand); color:#fff;}
   html[data-theme="light"] .cad-sidebar-item.active{background:var(--brand-dark);}
   .cad-content{min-width:0;}
-  .cad-add-row{display:flex; gap:8px; margin-bottom:16px;}
-  .cad-add-row input{flex:1; padding:11px 13px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:14px;}
+  .cad-add-row{display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;}
+  .cad-add-row input{flex:1; min-width:140px; padding:11px 13px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:14px;}
+  /* Descrição (Tarifa) tem 4 campos em vez de 1 -- a descrição pede mais
+     espaço, código/unidade/valor são curtos. */
+  .cad-add-row-tarifa input#tarifa-novo-descricao{flex:2; min-width:220px;}
+  .cad-add-row-tarifa input#tarifa-novo-codigo{flex:none; width:90px; min-width:0;}
+  .cad-add-row-tarifa select#tarifa-novo-unidade{flex:none; width:110px;}
+  .cad-add-row-tarifa input#tarifa-novo-valor{flex:none; width:130px; min-width:0;}
   .cad-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:10px;}
   .tabela-tradicional{width:100%; border-collapse:collapse; border:1px solid var(--border);}
   .tabela-tradicional th, .tabela-tradicional td{border:1px solid var(--border); padding:9px 14px; text-align:left; font-size:13.5px;}
@@ -616,6 +622,29 @@
     equipamento: "Equipamento", operador: "Operador"
   };
   var CATEGORIA_ORDEM = Object.keys(CATEGORIA_LABELS);
+
+  // Descrição (Tarifa) é uma categoria de cadastros, mas fica FORA de
+  // CATEGORIA_LABELS/CATEGORIA_ORDEM de propósito (17/09): o exportador e o
+  // importador de Excel genéricos (gerarModeloCadastros/importarModeloCadastros,
+  // via importar_cadastros_lote) são 1-coluna-por-categoria e normalizam
+  // acento (normalizar_texto_cadastro) -- e não sabem criar a tarifa
+  // (código/unidade/valor) junto. Misturado ao fluxo genérico, um import em
+  // lote gravaria "CONSTRUCAO DE ATERRO" sem acento (quebrando o vínculo com
+  // formulario_descricao/campos_ocultos_descricao, que usam o texto como
+  // chave) e sem tarifa nenhuma. Por isso esta categoria tem edição própria
+  // (salvar_descricao_tarifa) e não entra no Excel em lote por enquanto.
+  var CATEGORIA_DESCRICAO_TARIFA = "descricao_atividade";
+  var CATEGORIA_SIDEBAR = CATEGORIA_ORDEM.concat([CATEGORIA_DESCRICAO_TARIFA]);
+  var LABEL_DESCRICAO_TARIFA = "Descrição (Tarifa)";
+  function labelCategoria(cat){
+    return cat === CATEGORIA_DESCRICAO_TARIFA ? LABEL_DESCRICAO_TARIFA : (CATEGORIA_LABELS[cat] || cat);
+  }
+  // As mesmas 7 unidades hoje em uso no catálogo (conferido no banco, 17/09).
+  var UNIDADES_TARIFA = ["UN", "M²", "M³", "HT", "HD", "DIÁRIA", "KM"];
+  function formatarReal(v){
+    var n = Number(v);
+    return isNaN(n) ? "—" : "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
 
   var App = {
     tela: "carregando", // carregando | login | mfa-enroll | mfa-verify | dashboard | historico | detalhe | cadastros
@@ -1085,6 +1114,23 @@
       return true;
     });
   }
+  // Dedicada à categoria Descrição (Tarifa): grava o cadastro (a descrição)
+  // e a tarifa (regras_negocio) juntos, sem passar por salvar_cadastro (que
+  // normaliza acento e não toca em regras_negocio). Em edição, o servidor
+  // IGNORA p_descricao -- a descrição não pode ser renomeada por aqui, só
+  // código/unidade/valor/ativo, porque formulario_descricao e
+  // campos_ocultos_descricao usam o texto dela como chave.
+  function salvarDescricaoTarifa(id, descricao, codigo, unidade, valor, ativo){
+    return supabaseClient.rpc("salvar_descricao_tarifa", {
+      p_id: id || null, p_descricao: descricao, p_codigo: codigo, p_unidade: unidade,
+      p_valor_unitario: valor, p_ativo: ativo
+    }).then(function(resp){
+      if (resp.error){ showToast("Erro: " + resp.error.message); return false; }
+      carregarCadastrosAdmin();
+      carregarRegrasAdmin();
+      return true;
+    });
+  }
 
   function carregarRegrasAdmin(){
     supabaseClient.rpc("listar_regras_admin").then(function(resp){
@@ -1352,9 +1398,10 @@
       btn.onclick = function(){
         var aba = btn.getAttribute("data-aba");
         App.tela = aba;
-        if (aba === "cadastros" && !App.cadastrosCarregados) carregarCadastrosAdmin();
-        if (aba === "configuracoes"){
+        if (aba === "cadastros" || aba === "configuracoes"){
           if (!App.cadastrosCarregados) carregarCadastrosAdmin();
+          // Cadastros também precisa de regrasAdmin: a categoria Descrição
+          // (Tarifa) lê código/unidade/valor de regras_negocio (valorRegra).
           if (!App.regrasCarregadas) carregarRegrasAdmin();
         }
         render();
@@ -2043,25 +2090,38 @@
 
   /* ======================= RENDER: CADASTROS ======================= */
   function renderTelaCadastros(){
+    var isTarifa = App.categoriaAtiva === CATEGORIA_DESCRICAO_TARIFA;
     var itensCategoria = App.cadastrosAdmin.filter(function(c){ return c.categoria === App.categoriaAtiva; });
 
-    var html = '<div class="cad-toolbar">'+
-      '<button class="btn btn-secondary btn-sm" id="btn-gerar-modelo">Gerar modelo (Excel)</button>'+
-      '<button class="btn btn-secondary btn-sm" id="btn-importar-modelo">Importar modelo</button>'+
-      '<input type="file" id="input-importar-modelo" accept=".xlsx,.xls" style="display:none;">'+
-      '<span class="cad-toolbar-hint">Exporte o modelo, preencha as colunas no Excel e importe de volta para cadastrar em lote.</span>'+
-    '</div>';
+    var html = isTarifa
+      ? '<div class="cad-toolbar"><span class="cad-toolbar-hint">Código, unidade e valor de cada descrição -- o mesmo texto que alimenta o campo Descrição (Tarifa) do PWA. Editar (lápis) ajusta a tarifa, mas não renomeia a descrição. Sem importação em lote por enquanto.</span></div>'
+      : '<div class="cad-toolbar">'+
+        '<button class="btn btn-secondary btn-sm" id="btn-gerar-modelo">Gerar modelo (Excel)</button>'+
+        '<button class="btn btn-secondary btn-sm" id="btn-importar-modelo">Importar modelo</button>'+
+        '<input type="file" id="input-importar-modelo" accept=".xlsx,.xls" style="display:none;">'+
+        '<span class="cad-toolbar-hint">Exporte o modelo, preencha as colunas no Excel e importe de volta para cadastrar em lote.</span>'+
+      '</div>';
 
     html += '<div class="cadastros-layout">';
-    html += '<div class="cad-sidebar">'+CATEGORIA_ORDEM.map(function(cat){
-      return '<button class="cad-sidebar-item'+(App.categoriaAtiva===cat?" active":"")+'" data-cat="'+cat+'">'+CATEGORIA_LABELS[cat]+'</button>';
+    html += '<div class="cad-sidebar">'+CATEGORIA_SIDEBAR.map(function(cat){
+      return '<button class="cad-sidebar-item'+(App.categoriaAtiva===cat?" active":"")+'" data-cat="'+cat+'">'+esc(labelCategoria(cat))+'</button>';
     }).join("")+'</div>';
 
     html += '<div class="cad-content">';
-    html += '<div class="cad-add-row">'+
-      '<input type="text" id="cad-novo-valor" placeholder="Novo valor para '+CATEGORIA_LABELS[App.categoriaAtiva]+'...">'+
-      '<button class="btn btn-primary btn-sm" id="btn-cad-add">Adicionar</button>'+
-    '</div>';
+    html += isTarifa
+      ? '<div class="cad-add-row cad-add-row-tarifa">'+
+        '<input type="text" id="tarifa-novo-descricao" placeholder="Descrição da atividade...">'+
+        '<input type="text" id="tarifa-novo-codigo" placeholder="Código">'+
+        '<select id="tarifa-novo-unidade" class="filtro-campo-select">'+
+          UNIDADES_TARIFA.map(function(u){ return '<option value="'+u+'">'+u+'</option>'; }).join("")+
+        '</select>'+
+        '<input type="number" id="tarifa-novo-valor" placeholder="Valor (R$)" step="0.01" min="0">'+
+        '<button class="btn btn-primary btn-sm" id="btn-tarifa-add">Adicionar</button>'+
+      '</div>'
+      : '<div class="cad-add-row">'+
+        '<input type="text" id="cad-novo-valor" placeholder="Novo valor para '+esc(labelCategoria(App.categoriaAtiva))+'...">'+
+        '<button class="btn btn-primary btn-sm" id="btn-cad-add">Adicionar</button>'+
+      '</div>';
 
     if (!App.cadastrosCarregados){
       html += '<div class="spinner-wrap"><div class="spinner"></div></div>';
@@ -2086,22 +2146,80 @@
         '<span class="cad-paginacao-total">Exibindo '+(inicio+1)+'–'+Math.min(inicio+tam, itensCategoria.length)+' de '+itensCategoria.length+'</span>'+
       '</div>';
 
-      html += '<table class="tabela-tradicional"><thead><tr><th style="width:70px;">Ações</th><th>Valor</th></tr></thead><tbody>'+
-        itensPagina.map(function(c){
-          return '<tr class="'+(c.ativo?"":"linha-inativa")+'">'+
-            '<td class="celula-acoes-icone">'+
-              (c.ativo
-                ? '<button class="acao-icone perigo" data-id="'+c.id+'" data-action="desativar" title="Desativar">'+xIcon()+'</button>'
-                : '<button class="acao-icone sucesso" data-id="'+c.id+'" data-action="reativar" title="Reativar">'+undoIcon()+'</button>')+
-              '<button class="acao-icone" data-id="'+c.id+'" data-action="editar" title="Editar">'+editIcon()+'</button>'+
-            '</td>'+
-            '<td>'+esc(c.valor)+'</td>'+
-          '</tr>';
-        }).join("")+
-      '</tbody></table>';
+      if (isTarifa){
+        html += '<table class="tabela-tradicional"><thead><tr>'+
+          '<th style="width:70px;">Ações</th><th>Descrição</th><th>Código</th><th>Unidade</th><th>Valor (R$)</th>'+
+        '</tr></thead><tbody>'+
+          itensPagina.map(function(c){
+            var tarifa = valorRegra("tarifa_descricao", c.valor, null) || {};
+            return '<tr class="'+(c.ativo?"":"linha-inativa")+'">'+
+              '<td class="celula-acoes-icone">'+
+                (c.ativo
+                  ? '<button class="acao-icone perigo" data-id="'+c.id+'" data-action="desativar" title="Desativar">'+xIcon()+'</button>'
+                  : '<button class="acao-icone sucesso" data-id="'+c.id+'" data-action="reativar" title="Reativar">'+undoIcon()+'</button>')+
+                '<button class="acao-icone" data-id="'+c.id+'" data-action="editar" title="Editar">'+editIcon()+'</button>'+
+              '</td>'+
+              '<td>'+esc(c.valor)+'</td>'+
+              '<td>'+esc(tarifa.codigo||"—")+'</td>'+
+              '<td>'+esc(tarifa.unidade||"—")+'</td>'+
+              '<td>'+(tarifa.valor_unitario!=null ? esc(formatarReal(tarifa.valor_unitario)) : "—")+'</td>'+
+            '</tr>';
+          }).join("")+
+        '</tbody></table>';
+      } else {
+        html += '<table class="tabela-tradicional"><thead><tr><th style="width:70px;">Ações</th><th>Valor</th></tr></thead><tbody>'+
+          itensPagina.map(function(c){
+            return '<tr class="'+(c.ativo?"":"linha-inativa")+'">'+
+              '<td class="celula-acoes-icone">'+
+                (c.ativo
+                  ? '<button class="acao-icone perigo" data-id="'+c.id+'" data-action="desativar" title="Desativar">'+xIcon()+'</button>'
+                  : '<button class="acao-icone sucesso" data-id="'+c.id+'" data-action="reativar" title="Reativar">'+undoIcon()+'</button>')+
+                '<button class="acao-icone" data-id="'+c.id+'" data-action="editar" title="Editar">'+editIcon()+'</button>'+
+              '</td>'+
+              '<td>'+esc(c.valor)+'</td>'+
+            '</tr>';
+          }).join("")+
+        '</tbody></table>';
+      }
     }
     html += '</div></div>';
     return html;
+  }
+  // Modal de edição da categoria Descrição (Tarifa): descrição fica travada
+  // (mostrada, não editável) -- só código/unidade/valor mudam aqui. Ver o
+  // comentário de salvarDescricaoTarifa sobre por que renomear está fora.
+  function abrirEdicaoDescricaoTarifa(item){
+    var tarifa = valorRegra("tarifa_descricao", item.valor, null) || {};
+    showModal(
+      '<h3>Editar tarifa</h3>'+
+      '<p style="margin:0 0 6px; font-size:12px; color:var(--text-dim);">'+esc(LABEL_DESCRICAO_TARIFA)+'</p>'+
+      '<div style="margin-bottom:12px;"><label style="display:block; font-size:12px; color:var(--text-dim); margin-bottom:4px;">Descrição</label>'+
+        '<div style="padding:11px 13px; border-radius:9px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-dim); font-size:14px;">'+esc(item.valor)+'</div></div>'+
+      '<div style="display:flex; gap:10px; margin-bottom:16px;">'+
+        '<div style="flex:1;"><label style="display:block; font-size:12px; color:var(--text-dim); margin-bottom:4px;">Código</label>'+
+          '<input type="text" id="tarifa-edit-codigo" value="'+esc(tarifa.codigo||"")+'" style="width:100%; padding:11px 13px; border-radius:9px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:14px;"></div>'+
+        '<div style="flex:1;"><label style="display:block; font-size:12px; color:var(--text-dim); margin-bottom:4px;">Unidade</label>'+
+          '<select id="tarifa-edit-unidade" class="filtro-campo-select" style="width:100%; padding:11px 13px;">'+
+            UNIDADES_TARIFA.map(function(u){ return '<option value="'+u+'"'+(tarifa.unidade===u?" selected":"")+'>'+u+'</option>'; }).join("")+
+          '</select></div>'+
+      '</div>'+
+      '<div style="margin-bottom:16px;"><label style="display:block; font-size:12px; color:var(--text-dim); margin-bottom:4px;">Valor (R$)</label>'+
+        '<input type="number" id="tarifa-edit-valor" step="0.01" min="0" value="'+esc(tarifa.valor_unitario!=null?tarifa.valor_unitario:"")+'" style="width:100%; padding:11px 13px; border-radius:9px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:14px;"></div>'+
+      '<div class="actions"><button class="btn btn-secondary" id="modal-cancel" style="flex:1">Cancelar</button>'+
+      '<button class="btn btn-primary" id="modal-salvar-tarifa" style="flex:1">Salvar</button></div>'
+    );
+    document.getElementById("modal-cancel").onclick = hideModal;
+    function salvar(){
+      var codigo = document.getElementById("tarifa-edit-codigo").value.trim();
+      var unidade = document.getElementById("tarifa-edit-unidade").value;
+      var valor = Number(document.getElementById("tarifa-edit-valor").value);
+      if (!codigo){ showToast("Digite o código."); return; }
+      if (!valor || valor <= 0){ showToast("Digite um valor maior que zero."); return; }
+      salvarDescricaoTarifa(item.id, item.valor, codigo, unidade, valor, item.ativo).then(function(ok){
+        if (ok){ hideModal(); showToast("Tarifa atualizada."); }
+      });
+    }
+    document.getElementById("modal-salvar-tarifa").onclick = salvar;
   }
   function abrirEdicaoCadastro(item){
     showModal(
@@ -2196,15 +2314,24 @@
     reader.readAsArrayBuffer(file);
   }
   function ligarTelaCadastros(){
-    document.getElementById("btn-gerar-modelo").onclick = gerarModeloCadastros;
+    // Gerar/Importar modelo não existem na categoria Descrição (Tarifa) --
+    // o toolbar dela é só um texto explicativo (ver renderTelaCadastros).
+    var btnGerarModelo = document.getElementById("btn-gerar-modelo");
+    if (btnGerarModelo) btnGerarModelo.onclick = gerarModeloCadastros;
     var inputImportar = document.getElementById("input-importar-modelo");
-    document.getElementById("btn-importar-modelo").onclick = function(){ inputImportar.click(); };
-    inputImportar.onchange = function(){
+    var btnImportarModelo = document.getElementById("btn-importar-modelo");
+    if (btnImportarModelo) btnImportarModelo.onclick = function(){ inputImportar.click(); };
+    if (inputImportar) inputImportar.onchange = function(){
       if (inputImportar.files[0]) importarModeloCadastros(inputImportar.files[0]);
       inputImportar.value = "";
     };
     document.querySelectorAll(".cad-sidebar-item").forEach(function(btn){
-      btn.onclick = function(){ App.categoriaAtiva = btn.getAttribute("data-cat"); App.cadastrosPagina = 1; render(); };
+      btn.onclick = function(){
+        App.categoriaAtiva = btn.getAttribute("data-cat");
+        App.cadastrosPagina = 1;
+        if (App.categoriaAtiva === CATEGORIA_DESCRICAO_TARIFA && !App.regrasCarregadas) carregarRegrasAdmin();
+        render();
+      };
     });
     var btnPagPrimeira = document.getElementById("btn-pagina-primeira");
     if (btnPagPrimeira) btnPagPrimeira.onclick = function(){ App.cadastrosPagina = 1; render(); };
@@ -2226,21 +2353,42 @@
     };
     var btnAdd = document.getElementById("btn-cad-add");
     var inputNovo = document.getElementById("cad-novo-valor");
-    function adicionar(){
-      var valor = inputNovo.value.trim();
-      if (!valor){ showToast("Digite um valor."); return; }
-      salvarCadastro(null, App.categoriaAtiva, valor, true, 0).then(function(ok){
-        if (ok) showToast("Adicionado.");
-      });
+    if (btnAdd && inputNovo){
+      function adicionar(){
+        var valor = inputNovo.value.trim();
+        if (!valor){ showToast("Digite um valor."); return; }
+        salvarCadastro(null, App.categoriaAtiva, valor, true, 0).then(function(ok){
+          if (ok) showToast("Adicionado.");
+        });
+      }
+      btnAdd.onclick = adicionar;
+      inputNovo.addEventListener("keydown", function(e){ if (e.key === "Enter") adicionar(); });
     }
-    btnAdd.onclick = adicionar;
-    inputNovo.addEventListener("keydown", function(e){ if (e.key === "Enter") adicionar(); });
+
+    var btnTarifaAdd = document.getElementById("btn-tarifa-add");
+    if (btnTarifaAdd){
+      function adicionarTarifa(){
+        var descricao = document.getElementById("tarifa-novo-descricao").value.trim();
+        var codigo = document.getElementById("tarifa-novo-codigo").value.trim();
+        var unidade = document.getElementById("tarifa-novo-unidade").value;
+        var valor = Number(document.getElementById("tarifa-novo-valor").value);
+        if (!descricao){ showToast("Digite a descrição."); return; }
+        if (!codigo){ showToast("Digite o código."); return; }
+        if (!valor || valor <= 0){ showToast("Digite um valor maior que zero."); return; }
+        salvarDescricaoTarifa(null, descricao, codigo, unidade, valor, true).then(function(ok){
+          if (ok) showToast("Descrição cadastrada.");
+        });
+      }
+      btnTarifaAdd.onclick = adicionarTarifa;
+    }
 
     document.querySelectorAll('[data-action="editar"]').forEach(function(btn){
       btn.onclick = function(){
         var id = btn.getAttribute("data-id");
         var item = App.cadastrosAdmin.filter(function(c){ return c.id === id; })[0];
-        if (item) abrirEdicaoCadastro(item);
+        if (!item) return;
+        if (item.categoria === CATEGORIA_DESCRICAO_TARIFA) abrirEdicaoDescricaoTarifa(item);
+        else abrirEdicaoCadastro(item);
       };
     });
     document.querySelectorAll('[data-action="desativar"]').forEach(function(btn){
@@ -2256,7 +2404,17 @@
         var id = btn.getAttribute("data-id");
         var item = App.cadastrosAdmin.filter(function(c){ return c.id === id; })[0];
         if (!item) return;
-        salvarCadastro(id, item.categoria, item.valor, true, item.ordem).then(function(ok){ if (ok) showToast("Reativado."); });
+        if (item.categoria === CATEGORIA_DESCRICAO_TARIFA){
+          // Reativar aqui não pode passar por salvarCadastro genérico: ele
+          // chama salvar_cadastro, que normaliza acento (não é o campo certo
+          // pra essa categoria) e não sabe nada de regras_negocio. Usa a
+          // tarifa já lida do banco para não perder código/unidade/valor.
+          var tarifa = valorRegra("tarifa_descricao", item.valor, null) || {};
+          salvarDescricaoTarifa(id, item.valor, tarifa.codigo, tarifa.unidade, tarifa.valor_unitario, true)
+            .then(function(ok){ if (ok) showToast("Reativado."); });
+        } else {
+          salvarCadastro(id, item.categoria, item.valor, true, item.ordem).then(function(ok){ if (ok) showToast("Reativado."); });
+        }
       };
     });
   }
