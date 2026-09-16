@@ -284,6 +284,12 @@
      enormes entre si, dando a sensação de "informação esparsa no meio de
      muito espaço vazio". Aqui a tabela só ocupa o que o conteúdo pede. */
   .tabela-estreita{max-width:640px;}
+  /* 108 descrições não cabem na tela. Sem altura máxima, a tabela empurra
+     todo o resto das Configurações para fora da primeira dobra e o mapeamento
+     que vem depois dela fica invisível. */
+  .tabela-descricoes{max-height:420px; overflow-y:auto; max-width:720px;}
+  .tabela-descricoes table{width:100%;}
+  .tabela-descricoes thead th{position:sticky; top:0; background:var(--card); z-index:1;}
   .tabela-matriz-scroll{overflow-x:auto;}
   .tabela-matriz{width:auto;}
   .tabela-matriz th, .tabela-matriz td{white-space:nowrap;}
@@ -562,6 +568,8 @@
     cadastrosAdmin: [], categoriaAtiva: "cliente", cadastrosCarregados: false,
     regrasAdmin: [], regrasCarregadas: false,
     configAtividadeSelecionada: "",
+    configBuscaDescricao: "",    // filtro da tabela de formulário por descrição
+    configMapaAtividade: "",     // atividade aberta no mapeamento opcional
     cadastrosPagina: 1, cadastrosTamanhoPagina: 50
   };
 
@@ -1035,6 +1043,16 @@
     return supabaseClient.rpc("salvar_regra", { p_tipo_regra: tipoRegra, p_chave: chave, p_valor: valor }).then(function(resp){
       return !resp.error;
     });
+  }
+  // NFKD, e não NFD, pelo mesmo motivo que no PWA: as descrições têm "M³" e
+  // quem busca digita "M3". NFD tira acento mas não decompõe o superscrito;
+  // NFKD transforma ³ em 3. Isso já foi defeito em produção uma vez.
+  function normalizarBuscaPainel(s){
+    var t = String(s || "").toLowerCase()
+      .replace(/[‘’‛ʼ]/g, "'")
+      .replace(/[“”‟]/g, '"')
+      .replace(/[‐-―−]/g, "-");
+    return t.normalize ? t.normalize("NFKD").replace(/[̀-ͯ]/g, "") : t;
   }
   function valorRegra(tipoRegra, chave, padrao){
     var item = App.regrasAdmin.filter(function(r){ return r.tipo_regra === tipoRegra && r.chave === chave && r.ativo; })[0];
@@ -1859,8 +1877,8 @@
         var u = urlFotoAssinada(f.storage_path);
         // Sem assinatura ainda (ou falhou): mostra o espaço com aviso em vez
         // de uma imagem quebrada sem explicação.
-        if (!u) return '<div class="foto-indisponivel" title="'+escAttr(f.storage_path)+'">foto indisponível</div>';
-        return '<img src="'+escAttr(u)+'" data-full="'+escAttr(u)+'">';
+        if (!u) return '<div class="foto-indisponivel" title="'+esc(f.storage_path)+'">foto indisponível</div>';
+        return '<img src="'+esc(u)+'" data-full="'+esc(u)+'">';
       }).join("");
       var status   = a.status_revisao || "pendente";
       var removida = !!a.excluido_em;
@@ -2201,27 +2219,23 @@
   // lados PRECISAM concordar: se divergirem, a tela mostra marcado e o
   // aparelho trata como opcional, e ninguém entende por quê.
   var PADRAO_OBRIGATORIEDADE = { "Dimensão": false };
-  // Quais desses campos existem de verdade em cada formulário -- usado só
-  // pra FILTRAR a matriz quando uma atividade específica está selecionada
-  // (não faz sentido oferecer "Comprimento" pra configurar numa atividade
-  // que usa o formulário Hora Máquina, que nem tem esse campo).
-  var CAMPOS_POR_FORMULARIO = {
-    padrao: ["UP", "Dimensão", "Trecho", "Comprimento", "Largura", "Profundidade", "DMT", "Observação"],
-    hora_maquina: ["Tipo", "Hora Inicial", "Hora Final", "Observação"],
-    maquinas_detalhado: ["UP", "Trecho", "Quantidade", "Comprimento", "Largura", "Profundidade", "Hora Inicial", "Hora Final", "Observação"]
-  };
+  // CAMPOS_POR_FORMULARIO morava aqui e filtrava a matriz pelo formulário da
+  // atividade. Saiu em 14/09: atividade não tem mais formulário (ver
+  // configContextoAtual).
 
   // Compartilhado entre render e wiring -- assim o botão "marcar/desmarcar
   // coluna toda" sabe exatamente a mesma lista de campos que está na tela
   // (respeitando o filtro de atividade), sem duplicar a lógica.
+  // Até 14/09 a matriz filtrava os campos pelo formulário DA ATIVIDADE. Isso
+  // deixou de fazer sentido: quem escolhe o formulário é a descrição, e o
+  // operador combina qualquer atividade com qualquer descrição. Filtrar
+  // esconderia campos que a atividade usa de verdade -- as 36 atividades sem
+  // regra cairiam em "padrão" e não mostrariam Hora Inicial/Final, mesmo
+  // lançadas com PÁ CARREGADEIRA - HT. Agora mostra sempre todos.
   function configContextoAtual(){
     var atividadeSel = App.configAtividadeSelecionada;
     var prefixoChave = atividadeSel ? (atividadeSel+":") : "";
-    var formularioSel = atividadeSel ? valorRegra("formulario_atividade", atividadeSel, "padrao") : null;
-    var camposMostrados = atividadeSel
-      ? CAMPOS_CONFIGURAVEIS.filter(function(c){ return (CAMPOS_POR_FORMULARIO[formularioSel]||[]).indexOf(c) !== -1; })
-      : CAMPOS_CONFIGURAVEIS;
-    return { atividadeSel: atividadeSel, prefixoChave: prefixoChave, camposMostrados: camposMostrados };
+    return { atividadeSel: atividadeSel, prefixoChave: prefixoChave, camposMostrados: CAMPOS_CONFIGURAVEIS };
   }
 
   function renderTelaConfiguracoes(){
@@ -2233,19 +2247,72 @@
 
     var html = '<div class="config-row">';
 
+    // QUEM DECIDE O FORMULÁRIO É A DESCRIÇÃO, não a atividade (14/09).
+    //
+    // Antes esta tabela listava as 49 atividades. O problema, medido nas 2.126
+    // linhas da planilha: uma atividade reúne descrições que pedem formulários
+    // diferentes -- dentro de DRENAGENS IMPLANTAÇÃO convivem MINI CURVA (obra)
+    // e PÁ CARREGADEIRA (hora-máquina). Um seletor por atividade não cobria os
+    // dois, e 36 das 49 nem tinham regra: caíam no padrão por omissão.
+    //
+    // São 108 linhas agora, por isso a busca -- sem ela a tabela é inutilizável.
+    var descricoes = App.cadastrosAdmin.filter(function(c){ return c.categoria === "descricao_atividade" && c.ativo; });
+    var buscaForm = normalizarBuscaPainel(App.configBuscaDescricao || "");
+    var descricoesMostradas = buscaForm
+      ? descricoes.filter(function(d){ return normalizarBuscaPainel(d.valor).indexOf(buscaForm) !== -1; })
+      : descricoes;
+
     html += '<div class="config-section">';
-    html += '<div class="section-title" style="margin-top:0">Formulário por atividade</div>';
-    html += '<p class="helper-text" style="margin-top:0">Define qual formulário o PWA de campo mostra quando essa atividade é selecionada.</p>';
-    html += '<div class="tabela-wrap tabela-estreita"><table><thead><tr><th>Atividade</th><th>Formulário</th></tr></thead><tbody>';
-    html += atividades.map(function(a){
-      var atual = valorRegra("formulario_atividade", a.valor, "padrao");
-      return '<tr><td>'+esc(a.valor)+'</td><td>'+
-        '<select class="filtro-campo-select" data-atividade="'+esc(a.valor)+'">'+
+    html += '<div class="section-title" style="margin-top:0">Formulário por descrição (tarifa)</div>';
+    html += '<p class="helper-text" style="margin-top:0">Define qual formulário o PWA de campo mostra quando essa descrição é escolhida. A atividade não influencia o formulário -- as duas escolhas são livres.</p>';
+    html += '<div class="field" style="max-width:360px; margin-bottom:12px;">'+
+      '<input type="text" id="config-busca-descricao" class="filtro-campo-select" style="width:100%;" '+
+      'placeholder="Buscar descrição..." value="'+esc(App.configBuscaDescricao||"")+'"></div>';
+    html += '<p class="helper-text" style="margin-top:0">'+
+      descricoesMostradas.length+' de '+descricoes.length+' descrições</p>';
+    html += '<div class="tabela-wrap tabela-estreita tabela-descricoes"><table><thead><tr><th>Descrição (tarifa)</th><th>Formulário</th></tr></thead><tbody>';
+    html += descricoesMostradas.map(function(d){
+      var atual = valorRegra("formulario_descricao", d.valor, "padrao");
+      return '<tr><td>'+esc(d.valor)+'</td><td>'+
+        '<select class="filtro-campo-select" data-descricao="'+esc(d.valor)+'">'+
         FORMULARIOS_DISPONIVEIS.map(function(f){
           return '<option value="'+f.id+'"'+(atual===f.id?" selected":"")+'>'+f.label+'</option>';
         }).join("")+
         '</select></td></tr>';
     }).join("")+'</tbody></table></div>';
+    if (!descricoesMostradas.length){
+      html += '<p class="helper-text">Nenhuma descrição com esse texto.</p>';
+    }
+    html += '</div>';
+
+    // Mapeamento opcional atividade -> descrições (pedido do Fábio, 14/09).
+    //
+    // Hoje as duas escolhas são livres e devem continuar assim. Isto existe
+    // para o dia em que ele quiser amarrar: sem nada marcado, o PWA abre a
+    // lista inteira; com algo marcado, abre só o que está marcado. A tela
+    // deixa isso explícito para ninguém achar que "nada marcado" trava o campo.
+    html += '<div class="config-section">';
+    html += '<div class="section-title" style="margin-top:0">Descrições por atividade (opcional)</div>';
+    html += '<p class="helper-text" style="margin-top:0">Serve para restringir a lista que o operador vê. <b>Sem nada marcado, ele vê todas as descrições</b> -- que é como está hoje. Marque apenas se quiser amarrar uma atividade a um conjunto.</p>';
+    html += '<div class="field" style="max-width:360px; margin-bottom:14px;"><label>Atividade</label>'+
+      '<select id="config-mapa-atividade" class="filtro-campo-select" style="width:100%;">'+
+      '<option value="">Selecione uma atividade</option>'+
+      atividades.map(function(a){
+        return '<option value="'+esc(a.valor)+'"'+(App.configMapaAtividade===a.valor?" selected":"")+'>'+esc(a.valor)+'</option>';
+      }).join("")+'</select></div>';
+
+    if (App.configMapaAtividade){
+      var marcadas = valorRegra("descricoes_da_atividade", App.configMapaAtividade, []) || [];
+      html += '<p class="helper-text" style="margin-top:0">'+
+        (marcadas.length ? marcadas.length+' marcada(s): o operador verá só essas.'
+                         : 'Nenhuma marcada: o operador vê todas as 108.')+'</p>';
+      html += '<div class="tabela-wrap tabela-descricoes"><table><thead><tr><th style="width:44px"></th><th>Descrição</th></tr></thead><tbody>';
+      html += descricoes.map(function(d){
+        var m = marcadas.indexOf(d.valor) !== -1;
+        return '<tr><td><input type="checkbox" class="chk-mapa-descricao" data-descricao="'+esc(d.valor)+'"'+(m?" checked":"")+'></td>'+
+          '<td>'+esc(d.valor)+'</td></tr>';
+      }).join("")+'</tbody></table></div>';
+    }
     html += '</div>';
 
     html += '<div class="config-section">';
@@ -2301,10 +2368,56 @@
       App.configAtividadeSelecionada = this.value;
       render();
     };
-    document.querySelectorAll('select[data-atividade]').forEach(function(sel){
+    // Formulário por DESCRIÇÃO -- o seletor por atividade saiu (14/09).
+    document.querySelectorAll('select[data-descricao]').forEach(function(sel){
       sel.onchange = function(){
-        salvarRegra("formulario_atividade", sel.getAttribute("data-atividade"), sel.value).then(function(ok){
+        salvarRegra("formulario_descricao", sel.getAttribute("data-descricao"), sel.value).then(function(ok){
           if (ok) showToast("Formulário atualizado.");
+        });
+      };
+    });
+
+    // A busca não pode passar por render(): re-renderizar a cada tecla faz o
+    // campo perder o foco e o cursor voltar ao início. Filtra a tabela no
+    // próprio DOM e só guarda o texto no App, para sobreviver a um render
+    // disparado por outra coisa.
+    var buscaDesc = document.getElementById("config-busca-descricao");
+    if (buscaDesc) buscaDesc.oninput = function(){
+      App.configBuscaDescricao = this.value;
+      var alvo = normalizarBuscaPainel(this.value);
+      var tabela = document.querySelector(".tabela-descricoes table tbody");
+      if (!tabela) return;
+      var vistas = 0;
+      Array.prototype.forEach.call(tabela.rows, function(tr){
+        var texto = normalizarBuscaPainel(tr.cells[0] ? tr.cells[0].textContent : "");
+        var casa = !alvo || texto.indexOf(alvo) !== -1;
+        tr.hidden = !casa;
+        if (casa) vistas++;
+      });
+      var contador = buscaDesc.parentNode.nextElementSibling;
+      if (contador) contador.textContent = vistas + " de " + tabela.rows.length + " descrições";
+    };
+
+    var selMapa = document.getElementById("config-mapa-atividade");
+    if (selMapa) selMapa.onchange = function(){
+      App.configMapaAtividade = this.value;
+      render();
+    };
+
+    // Marcar/desmarcar uma descrição no mapeamento da atividade. O valor da
+    // regra é a LISTA inteira, então cada clique regrava a lista -- por isso
+    // ela é montada a partir do que está marcado na tela, e não incrementada
+    // sobre o que veio do banco (que pode estar defasado).
+    document.querySelectorAll(".chk-mapa-descricao").forEach(function(chk){
+      chk.onchange = function(){
+        if (!App.configMapaAtividade) return;
+        var marcadas = [];
+        document.querySelectorAll(".chk-mapa-descricao").forEach(function(c){
+          if (c.checked) marcadas.push(c.getAttribute("data-descricao"));
+        });
+        salvarRegra("descricoes_da_atividade", App.configMapaAtividade, marcadas).then(function(ok){
+          if (ok) showToast(marcadas.length ? (marcadas.length+" descrição(ões) para essa atividade.")
+                                            : "Nenhuma marcada: o operador vê todas.");
         });
       };
     });
