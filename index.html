@@ -1361,23 +1361,35 @@
     });
   }
 
-  // `producoes` é opcional: com mais de uma linha (a "irmã"), o revisor escolhe
-  // qual delas está errada. Com uma só, não há o que escolher e a pergunta
-  // seria ruído -- cai no modal simples de sempre.
-  //
   // `indicePadrao`: quando o clique partiu de uma linha específica do
-  // Histórico (cada linha já tem seu próprio botão Devolver), o modal nasce
-  // com AQUELA produção marcada -- sem isso o revisor teria de procurar de
-  // novo, numa lista de rádio, a linha que ele já estava olhando.
+  // Histórico (cada linha já tem seu próprio botão Devolver, e sabe a própria
+  // posição em `producoes`), NÃO faz sentido perguntar de novo qual produção
+  // é -- o revisor já escolheu isso ao clicar naquela linha. Pedido do Fábio:
+  // "já que estamos selecionando a produção que queremos devolver, é só
+  // seguir normal com o fluxo de devolução sem precisar mostrar todas as
+  // produções vinculadas". Cai direto no prompt de sempre, só com o motivo.
+  //
+  // A lista de escolha (mais abaixo) só sobra pra quem NÃO sabe ainda qual
+  // produção está em jogo -- hoje, só a tela de detalhe, que devolve por
+  // atividade inteira sem granularidade de linha (nenhum botão lá informa
+  // um índice).
+  //
+  // `producoes` é opcional: com mais de uma linha e sem índice conhecido, o
+  // revisor escolhe qual delas está errada. Com uma só, não há o que
+  // escolher e a pergunta seria ruído -- cai no modal simples de sempre.
   function pedirDevolucaoDeAtividade(id, numero, producoes, indicePadrao){
-    var varias = producoes && producoes.length > 1;
-    if (!varias){ devolucaoSimples(id, numero); return; }
+    if (indicePadrao != null){ devolucaoSimples(id, numero, indicePadrao); return; }
 
+    var varias = producoes && producoes.length > 1;
+    if (!varias){ devolucaoSimples(id, numero, null); return; }
+
+    // Chegar aqui já garante indicePadrao nulo (o early return de cima cobre
+    // o caso conhecido) -- "o apontamento inteiro" nasce marcado sempre.
     var titulo = numero != null ? ("Devolver o apontamento #" + numero + "?") : "Devolver essa atividade?";
     var opcoes = producoes.map(function(p, i){
       var r = rotuloProducao(p, i);
       return '<label class="prod-opcao">'+
-        '<input type="radio" name="prod-dev" value="'+i+'"'+(indicePadrao === i ? ' checked' : '')+'>'+
+        '<input type="radio" name="prod-dev" value="'+i+'">'+
         '<span><span class="rotulo">'+esc(r.titulo)+'</span><br>'+
         '<span class="detalhe">'+esc(r.detalhe)+'</span></span></label>';
     }).join("");
@@ -1386,7 +1398,7 @@
       '<p>Este apontamento tem '+producoes.length+' produções. Aponte qual delas precisa de correção — '+
       'o encarregado corrige o apontamento inteiro no aplicativo, mas saber qual linha foi apontada evita que ele procure o erro nas outras.</p>'+
       '<div class="prod-lista">'+
-        '<label class="prod-opcao"><input type="radio" name="prod-dev" value=""'+(indicePadrao == null ? ' checked' : '')+'>'+
+        '<label class="prod-opcao"><input type="radio" name="prod-dev" value="" checked>'+
         '<span><span class="rotulo">O apontamento inteiro</span><br>'+
         '<span class="detalhe">Não aponta uma produção específica</span></span></label>'+
         opcoes+
@@ -1408,13 +1420,18 @@
     };
   }
 
-  function devolucaoSimples(id, numero){
+  // indiceProducao: null quando devolve o apontamento sem apontar uma linha
+  // (tela de detalhe, ou Histórico com uma produção só); um número quando o
+  // clique já veio de uma linha específica do Histórico -- nesse caso o
+  // prompt é o mesmo de sempre, só o motivo, sem perguntar de novo qual
+  // produção é.
+  function devolucaoSimples(id, numero, indiceProducao){
     showPrompt(
       numero != null ? ("Devolver o apontamento #" + numero + "?") : "Devolver essa atividade?",
       "Descreva o que precisa ser corrigido. Isso volta pro PWA de quem lançou, com notificação.",
       "Ex: profundidade não bate com o combinado, confirme no local",
       "Devolver",
-      function(motivo){ enviarDevolucao(id, numero, motivo, null); }
+      function(motivo){ enviarDevolucao(id, numero, motivo, indiceProducao); }
     );
   }
 
