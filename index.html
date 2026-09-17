@@ -1364,7 +1364,12 @@
   // `producoes` é opcional: com mais de uma linha (a "irmã"), o revisor escolhe
   // qual delas está errada. Com uma só, não há o que escolher e a pergunta
   // seria ruído -- cai no modal simples de sempre.
-  function pedirDevolucaoDeAtividade(id, numero, producoes){
+  //
+  // `indicePadrao`: quando o clique partiu de uma linha específica do
+  // Histórico (cada linha já tem seu próprio botão Devolver), o modal nasce
+  // com AQUELA produção marcada -- sem isso o revisor teria de procurar de
+  // novo, numa lista de rádio, a linha que ele já estava olhando.
+  function pedirDevolucaoDeAtividade(id, numero, producoes, indicePadrao){
     var varias = producoes && producoes.length > 1;
     if (!varias){ devolucaoSimples(id, numero); return; }
 
@@ -1372,7 +1377,7 @@
     var opcoes = producoes.map(function(p, i){
       var r = rotuloProducao(p, i);
       return '<label class="prod-opcao">'+
-        '<input type="radio" name="prod-dev" value="'+i+'">'+
+        '<input type="radio" name="prod-dev" value="'+i+'"'+(indicePadrao === i ? ' checked' : '')+'>'+
         '<span><span class="rotulo">'+esc(r.titulo)+'</span><br>'+
         '<span class="detalhe">'+esc(r.detalhe)+'</span></span></label>';
     }).join("");
@@ -1381,7 +1386,7 @@
       '<p>Este apontamento tem '+producoes.length+' produções. Aponte qual delas precisa de correção — '+
       'o encarregado corrige o apontamento inteiro no aplicativo, mas saber qual linha foi apontada evita que ele procure o erro nas outras.</p>'+
       '<div class="prod-lista">'+
-        '<label class="prod-opcao"><input type="radio" name="prod-dev" value="" checked>'+
+        '<label class="prod-opcao"><input type="radio" name="prod-dev" value=""'+(indicePadrao == null ? ' checked' : '')+'>'+
         '<span><span class="rotulo">O apontamento inteiro</span><br>'+
         '<span class="detalhe">Não aponta uma produção específica</span></span></label>'+
         opcoes+
@@ -2020,10 +2025,28 @@
   //   validado / removido        -> Baixa  (não espera ninguém)
   //
   // O title diz de onde saiu, senão vira número mágico na tela.
+  // Pedido do Fábio (17/09): com várias produções e uma delas apontada na
+  // devolução, só ELA "é" devolvida aos olhos do painel -- mostrar Devolvido
+  // em TODAS as linhas irmãs faz parecer que o lançamento inteiro está
+  // errado, quando só uma medida foi questionada.
+  //
+  // `producao_devolvida_indice == null` cobre o caso antigo (devolução sem
+  // apontar uma linha, ou vinda da tela de detalhe) e o de uma produção só --
+  // aí não há o que distinguir, e o apontamento inteiro mostra Devolvido como
+  // sempre. Isto NÃO muda o que está no servidor: a atividade continua
+  // 'devolvido' de verdade, e por isso o botão de Devolver segue travado em
+  // toda linha irmã -- só a ETIQUETA muda, não a trava.
+  function ehADevolvidaNestaLinha(ap){
+    var a = ap.ativ;
+    if (a.status_revisao !== "devolvido") return false;
+    if (ap.totalProducoes <= 1 || a.producao_devolvida_indice == null) return true;
+    return a.producao_devolvida_indice === ap.indiceProducao;
+  }
+
   function prioridadeApontamento(ap){
     var a = ap.ativ;
     if (a.excluido_em) return { classe:"baixa", rotulo:"Baixa", motivo:"Removido no aparelho: não espera revisão." };
-    if (a.status_revisao === "devolvido") return { classe:"baixa", rotulo:"Baixa", motivo:"Devolvido: aguardando correção do encarregado." };
+    if (ehADevolvidaNestaLinha(ap)) return { classe:"baixa", rotulo:"Baixa", motivo:"Devolvido: aguardando correção do encarregado." };
     if (a.status_revisao === "validado") return { classe:"baixa", rotulo:"Baixa", motivo:"Já validado." };
     var dias = diasDesde(ap.sincronizadoEm || ap.data);
     if (dias != null && dias >= 3){
@@ -2033,13 +2056,22 @@
       motivo: dias == null ? "Pendente de revisão." : "Pendente de revisão há " + dias + " dia(s)." };
   }
 
-  function statusApontamento(a){
+  function statusApontamento(ap){
+    var a = ap.ativ;
     if (a.excluido_em){
       return { classe:"removida", rotulo:"Removido no aparelho",
         motivo:"O operador removeu do aplicativo" + (a.status_anterior_exclusao ? " (estava " + a.status_anterior_exclusao + ")" : "") + ". A linha e as fotos continuam no banco." };
     }
     if (a.status_revisao === "validado") return { classe:"validado", rotulo:"Validado", motivo:"" };
-    if (a.status_revisao === "devolvido") return { classe:"devolvido", rotulo:"Devolvido", motivo: a.motivo_devolucao || "" };
+    if (ehADevolvidaNestaLinha(ap)) return { classe:"devolvido", rotulo:"Devolvido", motivo: a.motivo_devolucao || "" };
+    if (a.status_revisao === "devolvido"){
+      // Linha irmã de uma devolução que apontou OUTRO item: esta aqui não foi
+      // a questionada, mas o lançamento inteiro só volta ao normal quando o
+      // encarregado corrigir e reenviar tudo -- daí o "pendente" em vez de
+      // "validado" ou algo que sugira que esta linha já está resolvida.
+      return { classe:"pendente", rotulo:"Pendente",
+        motivo:"Este item não foi o apontado na devolução -- o lançamento inteiro aguarda o encarregado corrigir e reenviar. Motivo da devolução: " + (a.motivo_devolucao || "—") };
+    }
     return { classe:"pendente", rotulo:"Pendente", motivo:"Aguardando revisão." };
   }
 
@@ -2065,7 +2097,16 @@
         // status_revisao que tinha antes, então filtrar por "pendente" traria
         // removidos junto se a checagem fosse só pelo campo.
         if (f.status === "removido"){ if (!ap.ativ.excluido_em) return false; }
-        else if (ap.ativ.excluido_em || ap.ativ.status_revisao !== f.status) return false;
+        else if (ap.ativ.excluido_em) return false;
+        else {
+          // Mesma régua do badge (ehADevolvidaNestaLinha): filtrar por
+          // "Devolvido" tem que trazer só as linhas que a TELA mostra como
+          // devolvidas, senão o filtro entrega uma linha que aparece
+          // "Pendente" -- e o revisor acha que o filtro está quebrado.
+          var statusEfetivo = ehADevolvidaNestaLinha(ap) ? "devolvido"
+            : (ap.ativ.status_revisao === "devolvido" ? "pendente" : ap.ativ.status_revisao);
+          if (statusEfetivo !== f.status) return false;
+        }
       }
       if (busca && textoBuscavelDoApontamento(ap).indexOf(busca) === -1) return false;
       return true;
@@ -2141,7 +2182,7 @@
     html += lista.map(function(ap){
       var a = ap.ativ;
       var prio = prioridadeApontamento(ap);
-      var st = statusApontamento(a);
+      var st = statusApontamento(ap);
       var removido = !!a.excluido_em;
       var devolvido = !removido && a.status_revisao === "devolvido";
 
@@ -2149,11 +2190,15 @@
       // mesma regra de alternância da tela de detalhe, e quem garante é o
       // banco (trava_devolucao_alternada.sql). Aqui é só não convidar ao
       // clique que o servidor vai recusar.
+      // data-indice: qual produção esta LINHA representa, para o modal de
+      // devolução já nascer com ela marcada -- clicar "Devolver" na linha da
+      // motoniveladora não deve obrigar o revisor a procurar de novo qual
+      // linha era essa numa lista de rádio.
       var botaoDevolver = removido
         ? '<button class="btn-tabela" disabled title="Apontamento removido no aplicativo pelo operador.">Devolver</button>'
         : (devolvido
             ? '<button class="btn-tabela" disabled title="'+esc(a.motivo_devolucao || "Aguardando o encarregado corrigir e reenviar pelo aplicativo.")+'">Aguardando correção</button>'
-            : '<button class="btn-tabela" data-action="hist-devolver" data-id="'+esc(a.id)+'" data-numero="'+esc(a.numero == null ? "" : a.numero)+'">Devolver para correção</button>');
+            : '<button class="btn-tabela" data-action="hist-devolver" data-id="'+esc(a.id)+'" data-numero="'+esc(a.numero == null ? "" : a.numero)+'" data-indice="'+esc(ap.indiceProducao)+'">Devolver para correção</button>');
 
       // Corrigir aqui mesmo, sem devolver para o campo. As mesmas condições do
       // servidor (editar_atividade_rdo): não em removido, não em devolvido --
@@ -2176,18 +2221,20 @@
         .filter(function(v){ return v; }).join(" · ") || "—";
 
       // Linha irmã = outra produção do MESMO apontamento (mesma atividade,
-      // outra máquina/medida). Até 17/09 o número, fazenda, tipo, status e
-      // prioridade só apareciam na primeira linha do grupo -- pedido do
-      // Fábio depois de ver em uso: cada linha é o registro de um
-      // lançamento, e ele quer ver esses dados em CADA linha, não só na
-      // primeira. Todos vêm de `a` (a atividade) ou `r` (o relatório) -- são
-      // idênticos entre as linhas irmãs, então repetir aqui não inventa
-      // dado nenhum, só para de escondê-lo.
+      // outra máquina/medida). Até 17/09 o número, fazenda, tipo, status,
+      // prioridade e ações só apareciam na primeira linha do grupo -- pedido
+      // do Fábio depois de ver em uso: cada linha é o registro de um
+      // lançamento, e ele quer ver TUDO em CADA linha, ações incluídas,
+      // mesmo vindo de um lançamento só. Nº/fazenda/tipo/status/prioridade
+      // vêm de `a` (a atividade) ou `r` (o relatório) -- idênticos entre as
+      // linhas irmãs, então repetir não inventa dado, só para de escondê-lo.
       //
-      // Ações fica de fora de propósito: Editar e Devolver agem sobre a
-      // atividade/relatório inteiro, que é o MESMO em todas as linhas
-      // irmãs -- repetir os botões seria 4 atalhos idênticos para a mesma
-      // ação, não 4 ações diferentes.
+      // Editar e Devolver agem sobre a MESMA atividade em qualquer linha do
+      // grupo -- não é 4 ações diferentes, é a mesma ação alcançável de
+      // qualquer linha. Para Devolver isso é uma vantagem, não uma
+      // duplicata: cada botão já nasce com a própria produção pré-marcada no
+      // modal (data-indice), então devolver a partir da linha certa poupa o
+      // revisor de procurar de novo qual linha era.
       var repetida = !ap.primeiraDoApontamento;
 
       return '<tr class="'+(removido?"linha-removida ":"")+(repetida?"linha-irma":"")+'">'+
@@ -2220,19 +2267,23 @@
         '<td>'+esc(upTrecho)+'</td>'+
         '<td>'+esc(ap.frente || "—")+'</td>'+
         '<td>'+esc(ap.encarregado || "—")+'</td>'+
-        // Só Editar e Devolver. Havia aqui um terceiro botão rotulado "Editar"
-        // que na verdade era `hist-abrir` -- levava à tela de detalhe do
-        // relatório inteiro e nunca editou nada. Saiu em 17/09 por decisão do
-        // Fábio: "o botão abrir na verdade não é para existir".
+        // Editar e Devolver em CADA linha (pedido do Fábio, 17/09: "era para
+        // ter o botão de editar e devolver em cada, não era? Mesmo que esses
+        // apontamentos tenham vindo de um único lançamento"). As duas ações
+        // continuam mirando a MESMA atividade em qualquer linha do grupo --
+        // não é 4 ações diferentes, é a mesma ação alcançável de qualquer
+        // linha, o que é útil de verdade pro Devolver: o índice desta linha
+        // já nasce marcado no modal (ver data-indice em botaoDevolver).
         //
-        // O detalhamento de UM apontamento vai voltar por outro caminho (botão
-        // direito do mouse, e na tela de Relatórios, não aqui) -- depois que
-        // aquela tela for polida. Não é perda de acesso: a tela de Relatórios
-        // já leva ao detalhe do relatório por dois caminhos próprios.
-        '<td class="col-acoes">'+(repetida ? '' :
-          botaoEditar+
-          botaoDevolver)+
-        '</td>'+
+        // Havia aqui um terceiro botão rotulado "Editar" que na verdade era
+        // `hist-abrir` -- levava à tela de detalhe do relatório inteiro e
+        // nunca editou nada. Saiu em 17/09 por decisão do Fábio: "o botão
+        // abrir na verdade não é para existir". O detalhamento de UM
+        // apontamento vai voltar por outro caminho (botão direito do mouse,
+        // na tela de Relatórios) depois que aquela tela for polida -- não é
+        // perda de acesso, a tela de Relatórios já leva ao detalhe por dois
+        // caminhos próprios.
+        '<td class="col-acoes">'+botaoEditar+botaoDevolver+'</td>'+
       '</tr>';
     }).join("");
 
@@ -2268,12 +2319,16 @@
       btn.onclick = function(){
         var id = btn.getAttribute("data-id");
         var numeroTxt = btn.getAttribute("data-numero");
+        var indiceTxt = btn.getAttribute("data-indice");
         var a = atividadePorId(id);
         // Mesma escolha de produção da tela de detalhe: o Histórico mostra uma
         // linha por produção, então é justamente aqui que o revisor está
-        // olhando a linha irmã que quer apontar.
+        // olhando a linha irmã que quer apontar. O índice da PRÓPRIA linha
+        // clicada já nasce marcado no modal -- não precisa escolher de novo o
+        // que já estava na tela.
         pedirDevolucaoDeAtividade(id, numeroTxt ? Number(numeroTxt) : null,
-                                  a ? a.producoes : null);
+                                  a ? a.producoes : null,
+                                  (indiceTxt !== null && indiceTxt !== "") ? Number(indiceTxt) : null);
       };
     });
     document.querySelectorAll('[data-action="hist-editar"]').forEach(function(btn){
