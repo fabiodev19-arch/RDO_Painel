@@ -196,8 +196,10 @@
      competir com o dado principal. */
   .col-sub{font-size:11.5px; color:var(--text-dim); font-weight:400; margin-top:2px;}
   /* Linha irmã: outra produção do MESMO apontamento. Sem borda em cima, para as
-     linhas do mesmo apontamento lerem como um bloco só -- é o que substitui
-     repetir número e fazenda em todas elas. */
+     linhas do mesmo apontamento lerem como um bloco só -- Nº/fazenda/tipo/
+     status/prioridade repetem em cada linha (pedido do Fábio, 17/09), mas o
+     bloco visual continua ajudando a ver de relance quais linhas são do
+     mesmo apontamento. */
   .tabela-hist tbody tr.linha-irma td{border-top:none;}
   .tabela-hist tbody tr.linha-irma td:first-child{
     border-left:2px solid var(--border);
@@ -1818,27 +1820,37 @@
       var upTrecho = [p.up || a.up, p.trecho || a.trecho]
         .filter(function(v){ return v; }).join(" · ") || "—";
 
-      // Nas linhas irmãs (mesma atividade, outra máquina) o número e a fazenda
-      // ficam em branco: repeti-los em cada linha vira uma parede de texto e
-      // esconde justamente o que muda de uma linha para a outra.
+      // Linha irmã = outra produção do MESMO apontamento (mesma atividade,
+      // outra máquina/medida). Até 17/09 o número, fazenda, tipo, status e
+      // prioridade só apareciam na primeira linha do grupo -- pedido do
+      // Fábio depois de ver em uso: cada linha é o registro de um
+      // lançamento, e ele quer ver esses dados em CADA linha, não só na
+      // primeira. Todos vêm de `a` (a atividade) ou `r` (o relatório) -- são
+      // idênticos entre as linhas irmãs, então repetir aqui não inventa
+      // dado nenhum, só para de escondê-lo.
+      //
+      // Ações fica de fora de propósito: Editar e Devolver agem sobre a
+      // atividade/relatório inteiro, que é o MESMO em todas as linhas
+      // irmãs -- repetir os botões seria 4 atalhos idênticos para a mesma
+      // ação, não 4 ações diferentes.
       var repetida = !ap.primeiraDoApontamento;
 
       return '<tr class="'+(removido?"linha-removida ":"")+(repetida?"linha-irma":"")+'">'+
-        '<td class="col-num">'+(repetida ? '' : (a.numero != null ? "#"+esc(a.numero) : "—"))+
-          (!repetida && ap.totalProducoes > 1 ? '<div class="col-sub">'+ap.totalProducoes+' linhas</div>' : '')+'</td>'+
-        '<td class="col-fazenda">'+(repetida ? '' : esc(ap.fazenda || "—"))+'</td>'+
-        '<td class="col-data">'+(repetida ? '' : formatarData(ap.data))+'</td>'+
-        '<td>'+(repetida ? '' : esc(a.tipo_atividade || "—"))+'</td>'+
+        '<td class="col-num">'+(a.numero != null ? "#"+esc(a.numero) : "—")+
+          (ap.totalProducoes > 1 ? '<div class="col-sub">'+ap.totalProducoes+' linhas</div>' : '')+'</td>'+
+        '<td class="col-fazenda">'+esc(ap.fazenda || "—")+'</td>'+
+        '<td class="col-data">'+formatarData(ap.data)+'</td>'+
+        '<td>'+esc(a.tipo_atividade || "—")+'</td>'+
         '<td>'+(p.descricao_atividade
                   ? esc(p.descricao_atividade)
                   : '<span class="col-sem-descricao" title="Sem descrição não há tarifa nem unidade, e a produção não pode ser calculada.">sem descrição</span>')+'</td>'+
         '<td>'+maquinaHtml+'</td>'+
         '<td class="col-medicao"'+(prodFmt.titulo?' title="'+esc(prodFmt.titulo)+'"':'')+'>'+esc(prodFmt.texto)+'</td>'+
-        '<td>'+(repetida ? '' : '<span class="badge badge-'+st.classe+'"'+(st.motivo?' title="'+esc(st.motivo)+'"':'')+'>'+esc(st.rotulo)+'</span>')+'</td>'+
-        '<td>'+(repetida ? '' : '<span class="badge badge-'+prio.classe+'" title="'+esc(prio.motivo)+'">'+esc(prio.rotulo)+'</span>')+'</td>'+
+        '<td><span class="badge badge-'+st.classe+'"'+(st.motivo?' title="'+esc(st.motivo)+'"':'')+'>'+esc(st.rotulo)+'</span></td>'+
+        '<td><span class="badge badge-'+prio.classe+'" title="'+esc(prio.motivo)+'">'+esc(prio.rotulo)+'</span></td>'+
         '<td>'+esc(upTrecho)+'</td>'+
-        '<td>'+(repetida ? '' : esc(ap.frente || "—"))+'</td>'+
-        '<td>'+(repetida ? '' : esc(ap.encarregado || "—"))+'</td>'+
+        '<td>'+esc(ap.frente || "—")+'</td>'+
+        '<td>'+esc(ap.encarregado || "—")+'</td>'+
         '<td class="col-acoes">'+(repetida ? '' :
           '<button class="btn-tabela" data-action="hist-abrir" data-rel="'+esc(ap.rel.id)+'">Editar</button> '+
           botaoDevolver)+
