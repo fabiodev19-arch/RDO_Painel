@@ -423,6 +423,49 @@
     padding:8px 10px; margin-top:10px;
   }
   .ativ-acoes-revisao{display:flex; gap:8px; margin-top:12px; padding-top:12px; border-top:1px solid var(--border);}
+  /* Um apontamento corrigido no painel não é mais o que o campo mandou. Sem
+     esta marca, o revisor seguinte compara com a foto e não entende a
+     diferença -- e o encarregado jura que enviou outro número. */
+  .ativ-editado{
+    font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px;
+    background:var(--surface-3); color:var(--text-dim); white-space:nowrap;
+  }
+  /* Qual produção foi apontada na devolução. Só faz sentido quando o
+     apontamento tem mais de uma (linha "irmã") -- com uma só, destacar a
+     única seria ruído. */
+  .prod-devolvida-aviso{
+    font-size:12.5px; color:var(--danger); margin-top:6px; font-weight:600;
+  }
+  /* Formulário do modal de edição. Grid pelo mesmo motivo dos .campos da
+     atividade: são medidas curtas, e uma coluna só faria a caixa crescer
+     além da tela. */
+  .mod-form{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;}
+  .mod-form .largo{grid-column:1/-1;}
+  .mod-campo label{font-size:10.5px; color:var(--text-dim); display:block; margin-bottom:3px;}
+  .mod-campo input, .mod-campo select, .mod-campo textarea{
+    width:100%; padding:8px 10px; border-radius:var(--radius-sm); border:1px solid var(--border);
+    background:var(--surface-2); color:var(--text); font-size:13px; font-family:inherit;
+  }
+  .mod-campo textarea{resize:vertical;}
+  /* A caixa de edição é maior que a de confirmação: são 12 campos, e apertá-los
+     em 360px obrigaria a rolar dentro do modal para ver o que se está mudando. */
+  .modal-box.largo{max-width:560px;}
+  .mod-aviso{
+    font-size:12px; color:var(--text-dim); background:var(--surface-3);
+    border-radius:var(--radius-sm); padding:8px 10px; margin:0 0 14px; line-height:1.45;
+  }
+  /* Escolha de qual produção devolver. Rádio e não select: com 2 a 7 linhas
+     irmãs, ver todas de uma vez é o que permite comparar antes de escolher. */
+  .prod-lista{display:flex; flex-direction:column; gap:6px; margin:4px 0 14px; max-height:210px; overflow-y:auto;}
+  .prod-opcao{
+    display:flex; align-items:flex-start; gap:8px; padding:8px 10px; cursor:pointer;
+    border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface-2);
+    font-size:12.5px; line-height:1.4;
+  }
+  .prod-opcao:hover{border-color:var(--brand);}
+  .prod-opcao input{margin-top:2px; flex-shrink:0;}
+  .prod-opcao .rotulo{font-weight:600;}
+  .prod-opcao .detalhe{color:var(--text-dim); font-size:11.5px;}
   .lista-inline{font-size:13px; color:var(--text); margin:0;}
   .fotos-grid{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
   .fotos-grid img{width:84px; height:84px; object-fit:cover; border-radius:9px; border:1px solid var(--border); cursor:pointer;}
@@ -562,16 +605,36 @@
   .modal-overlay{
     position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center;
     padding:24px; opacity:0; pointer-events:none; transition:opacity .15s ease; z-index:30;
+    overflow-y:auto;
   }
   .modal-overlay.show{opacity:1; pointer-events:auto;}
-  .modal-box{background:var(--surface); border-radius:var(--radius); padding:20px; max-width:360px; width:100%; box-shadow:var(--shadow);}
+  /* max-height + overflow interno: sem isso, um modal mais alto que a janela
+     é cortado nas DUAS pontas -- `align-items:center` sobe o topo para fora
+     (medido: -46px num 1366x768) e os botões saem embaixo. E `overflow:visible`
+     no overlay não rola, então não havia como salvar nem cancelar: só
+     descartar pelo fundo, perdendo a edição.
+     Os 48px descontados são o padding do overlay. */
+  .modal-box{
+    background:var(--surface); border-radius:var(--radius); padding:20px; max-width:360px; width:100%;
+    box-shadow:var(--shadow); max-height:calc(100vh - 48px); overflow-y:auto;
+  }
   .modal-textarea{
     width:100%; padding:10px 12px; border-radius:var(--radius-sm); border:1px solid var(--border);
     background:var(--surface-2); color:var(--text); font-size:13.5px; font-family:inherit; resize:vertical; margin:4px 0 2px;
   }
   .modal-box h3{margin:0 0 8px; font-size:16px;}
   .modal-box p{margin:0 0 18px; font-size:13.5px; color:var(--text-dim); line-height:1.5;}
-  .modal-box .actions{display:flex; gap:9px;}
+  /* Grudada no fundo: num formulário de 12 campos que rola por dentro, sem
+     isso o revisor abre a edição e não vê Salvar nem Cancelar até rolar até o
+     fim -- e o que não se vê parece não existir. Nos modais curtos (confirmar,
+     motivo da devolução) não há rolagem, então o sticky não muda nada.
+     O padding negativo/positivo estende o fundo até as bordas do modal, senão
+     o conteúdo aparece por baixo nas laterais ao rolar. */
+  .modal-box .actions{
+    display:flex; gap:9px;
+    position:sticky; bottom:-20px; background:var(--surface);
+    padding:10px 20px 20px; margin:0 -20px -20px;
+  }
   .modal-box img{max-width:100%; border-radius:var(--radius-sm); display:block;}
 
   .spinner-wrap{display:flex; align-items:center; justify-content:center; padding:60px;}
@@ -738,8 +801,14 @@
   document.addEventListener("visibilitychange", function(){
     if (!document.hidden) document.title = _tituloOriginal;
   });
-  function showModal(html){
-    document.getElementById("modal-box").innerHTML = html;
+  // `largo` é opcional: quem não passa nada continua com a caixa de sempre.
+  // A classe é sempre reajustada (não só adicionada) porque o modal-box é
+  // reaproveitado entre aberturas -- sem o remove, a primeira edição deixaria
+  // todas as confirmações seguintes largas.
+  function showModal(html, largo){
+    var box = document.getElementById("modal-box");
+    box.innerHTML = html;
+    if (largo) box.classList.add("largo"); else box.classList.remove("largo");
     document.getElementById("modal-overlay").classList.add("show");
   }
   function hideModal(){ document.getElementById("modal-overlay").classList.remove("show"); }
@@ -828,6 +897,18 @@
 
   function relatorioAtual(){
     return App.relatorios.filter(function(x){ return x.id === App.relatorioAtualId; })[0];
+  }
+  // A atividade inteira, não só o número: quem devolve precisa das `producoes`
+  // para escolher a linha, e quem edita precisa de todos os campos.
+  //
+  // Varre TODOS os relatórios, não só o atual, porque o Histórico é uma lista
+  // de apontamentos de vários relatórios -- lá não existe "relatório atual".
+  function atividadePorId(id){
+    var achada = null;
+    (App.relatorios || []).forEach(function(r){
+      (r.atividades || []).forEach(function(a){ if (a.id === id) achada = a; });
+    });
+    return achada;
   }
 
   function urlFotoAssinada(path){
@@ -1066,30 +1147,292 @@
   // histórico de apontamentos. Duplicar isso significaria manter dois lugares
   // com a mesma regra de recarregar-no-erro e disparar push -- e um dos dois
   // ficaria para trás na primeira mudança.
-  function pedirDevolucaoDeAtividade(id, numero){
+  // Carrega os cadastros SÓ se ainda não vieram, e sem chamar render() --
+  // diferente de carregarCadastrosAdmin(), que renderiza no fim e fecharia o
+  // modal que estamos abrindo.
+  function garantirCadastros(cb){
+    if (App.cadastrosCarregados){ cb(); return; }
+    // O aviso não é enfeite: na primeira edição da sessão os cadastros ainda
+    // não vieram (só carregam ao abrir Cadastros ou Configurações), então o
+    // clique espera uma ida ao servidor. Sem dizer nada, o botão parece morto
+    // e o revisor clica de novo.
+    showToast("Carregando as descrições cadastradas...");
+    supabaseClient.rpc("listar_cadastros_admin").then(function(resp){
+      if (resp.error){ showToast("Não foi possível carregar os cadastros: " + resp.error.message); return; }
+      App.cadastrosAdmin = resp.data || [];
+      App.cadastrosCarregados = true;
+      cb();
+    });
+  }
+
+  // Monta um <select> com os valores de uma categoria do cadastro.
+  //
+  // `atual` entra na lista mesmo que esteja DESATIVADO no cadastro, e esse
+  // detalhe não é cosmético: um apontamento antigo pode apontar para uma
+  // descrição que saiu de linha. Se ela não aparecesse, abrir a edição para
+  // corrigir a largura trocaria a tarifa em silêncio -- e o cálculo é baseado
+  // nela. O revisor tem de poder salvar sem mexer no que não veio mexer.
+  function opcoesCadastro(categoria, atual, vazioLabel){
+    var itens = App.cadastrosAdmin.filter(function(c){
+      return c.categoria === categoria && c.ativo;
+    }).map(function(c){ return c.valor; });
+
+    if (atual && itens.indexOf(atual) === -1) itens.unshift(atual);
+    itens.sort(function(a,b){ return String(a).localeCompare(String(b), "pt-BR"); });
+
+    var html = '<option value="">' + esc(vazioLabel || "— não definido —") + '</option>';
+    itens.forEach(function(v){
+      html += '<option value="'+esc(v)+'"'+(v === atual ? ' selected' : '')+'>'+esc(v)+'</option>';
+    });
+    return html;
+  }
+
+  // Rótulo curto de uma linha de produção, para a escolha na devolução.
+  // Reaproveita producaoFormatada() em vez de inventar uma terceira forma de
+  // mostrar medida -- as telas têm de concordar sobre qual é o número.
+  function rotuloProducao(p, i){
+    var titulo = p.origem === "maquina"
+      ? ((p.equipamento || "Máquina") + (p.operador ? " — " + p.operador : ""))
+      : "Apontamento";
+    var prod = producaoFormatada(p);
+    var partes = [];
+    if (p.descricao_atividade) partes.push(p.descricao_atividade);
+    partes.push("Produção " + prod.texto);
+    return { titulo: (i + 1) + ". " + titulo, detalhe: partes.join(" · ") };
+  }
+
+  // ---- Editar o apontamento pelo painel (17/09) -------------------------
+  // Existe para a correção pequena: uma medida trocada, uma observação. Sem
+  // isso, o único caminho era devolver para o PWA -- tirar o encarregado do
+  // serviço por causa de um dígito.
+  //
+  // O servidor é quem garante as regras (editar_atividade_rdo): exige 2FA, só
+  // aceita pendente/validado, e devolve o apontamento para 'pendente' quando a
+  // edição muda algum dado de um que já estava validado. Aqui é a tela.
+  // O aviso vem ANTES do formulário, e mora aqui dentro de propósito: se
+  // estivesse no handler de cada botão, o próximo caminho que chamasse a
+  // edição nasceria sem ele.
+  //
+  // Por que avisar: editar pelo painel NÃO é o fluxo do sistema. O normal é
+  // devolver para o encarregado corrigir no aplicativo -- assim quem lançou
+  // fica sabendo do erro, e a correção vem de quem estava no campo e pode
+  // conferir no local. Editar aqui muda o apontamento sem que ele seja
+  // avisado de nada.
+  function abrirEdicaoApontamento(a){
+    showConfirm(
+      "Editar direto no painel?",
+      "O caminho normal é devolver o apontamento para o encarregado corrigir no aplicativo — " +
+      "assim quem lançou fica sabendo do erro e a correção vem de quem estava no local. " +
+      "Editando aqui, o apontamento muda sem que ele seja avisado. " +
+      "Fica registrado que a alteração foi feita no painel, por você. " +
+      "Use quando a correção não puder esperar o campo.",
+      "Editar mesmo assim",
+      function(){ abrirFormularioEdicao(a); }
+    );
+  }
+
+  function abrirFormularioEdicao(a){
+    garantirCadastros(function(){
+      function campoNum(nome, rotulo, valor){
+        // type="text" com inputmode decimal em vez de type="number": quem
+        // preenche digita "12,5" com vírgula, e type=number descarta o valor
+        // sem avisar em locale pt-BR. A conversão é feita ao salvar.
+        return '<div class="mod-campo"><label>'+esc(rotulo)+'</label>'+
+          '<input type="text" inputmode="decimal" id="ed-'+nome+'" value="'+
+          esc(valor != null ? String(valor).replace(".", ",") : "")+'"></div>';
+      }
+
+      var validado = a.status_revisao === "validado";
+
+      // Apontamento cuja produção vem de MÁQUINA (hora-máquina, máquinas
+      // detalhado): os números que viram medição moram em
+      // atividade_maquinas.dados, e editar_atividade_rdo não toca lá de
+      // propósito (escopo combinado). Sem este aviso, o revisor muda
+      // Comprimento, recebe "salvo", e a coluna Produção não se move -- e, se
+      // o apontamento estava validado, ele volta para pendente por uma
+      // alteração que não mudou nada do que se vê. Pior que não poder editar é
+      // parecer que editou.
+      var porMaquina = (a.producoes || []).some(function(p){ return p.origem === "maquina"; });
+
+      var html = '<h3>Editar o apontamento'+(a.numero != null ? ' #'+esc(String(a.numero)) : '')+'</h3>'+
+        '<p>Corrija aqui o que veio errado do campo. Fica registrado que o apontamento foi editado no painel.</p>'+
+        (validado
+          ? '<div class="mod-aviso">Este apontamento está <strong>validado</strong>. Se você mudar algum dado, ele volta para <strong>pendente de revisão</strong> — continuar aprovado com um número diferente do que foi aprovado esconderia a mudança de quem confere depois.</div>'
+          : '')+
+        (porMaquina
+          ? '<div class="mod-aviso">Neste apontamento a produção é medida <strong>por máquina</strong> (hora inicial/final, quantidade), e esses valores <strong>não são editáveis aqui</strong> — os campos abaixo são do apontamento, não das máquinas. Para corrigir a medida de uma máquina, <strong>devolva para o campo</strong>.</div>'
+          : '')+
+        '<div class="mod-aviso">A <strong>descrição (tarifa)</strong> só pode ser trocada por outra já cadastrada. É ela que define o código, a unidade e o valor usados no cálculo — texto livre aqui quebraria o rastreio da medição.</div>'+
+        '<div class="mod-form">'+
+          '<div class="mod-campo largo"><label>Tipo de atividade</label>'+
+            '<select id="ed-tipo_atividade">'+opcoesCadastro("tipo_atividade", a.tipo_atividade, "— escolha o tipo —")+'</select></div>'+
+          '<div class="mod-campo largo"><label>Descrição (tarifa)</label>'+
+            '<select id="ed-descricao_atividade">'+opcoesCadastro("descricao_atividade", a.descricao_atividade, "— sem descrição —")+'</select></div>'+
+          '<div class="mod-campo"><label>UP (talhão)</label><input type="text" id="ed-up" value="'+esc(a.up||"")+'"></div>'+
+          '<div class="mod-campo"><label>Trecho</label><input type="text" id="ed-trecho" value="'+esc(a.trecho||"")+'"></div>'+
+          '<div class="mod-campo largo"><label>Tipo (hora máquina)</label><input type="text" id="ed-tipo" value="'+esc(a.tipo||"")+'"></div>'+
+          campoNum("dimensao_m", "Dimensão (m)", a.dimensao_m)+
+          campoNum("comprimento_m", "Comprimento (m)", a.comprimento_m)+
+          campoNum("largura_m", "Largura (m)", a.largura_m)+
+          campoNum("profundidade_cm", "Profundidade (cm)", a.profundidade_cm)+
+          campoNum("dmt_km_inicial", "DMT inicial (km)", a.dmt_km_inicial)+
+          campoNum("dmt_km_final", "DMT final (km)", a.dmt_km_final)+
+          '<div class="mod-campo largo"><label>Observação</label>'+
+            '<textarea id="ed-observacao" rows="3">'+esc(a.observacao||"")+'</textarea></div>'+
+        '</div>'+
+        '<div class="actions">'+
+          '<button class="btn btn-secondary" id="modal-cancel" style="flex:1">Cancelar</button>'+
+          '<button class="btn btn-primary" id="modal-ok" style="flex:1">Salvar</button>'+
+        '</div>';
+
+      showModal(html, true);
+      document.getElementById("modal-cancel").onclick = hideModal;
+      document.getElementById("modal-ok").onclick = function(){
+        var invalidos = [];
+
+        // Aceita o número no formato que o painel MOSTRA. A coluna Produção
+        // imprime "1.250,75" (fmtNum), e era isso que o revisor copiava de
+        // volta -- a versão anterior trocava só a vírgula, virava "1.250.75",
+        // dava NaN, e o campo era salvo como NULL: a medida desaparecia e o
+        // aviso dizia "salvo". Agora o ponto de milhar é removido antes.
+        //
+        // E número ilegível NÃO vira null em silêncio: entra em `invalidos` e
+        // a gravação é barrada. Apagar uma medida por um dígito digitado
+        // errado é pior do que recusar o salvamento.
+        function num(nome, rotulo){
+          var bruto = (document.getElementById("ed-"+nome).value || "").trim();
+          if (bruto === "") return null;
+          var limpo = bruto.replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
+          var n = Number(limpo);
+          if (isNaN(n)){ invalidos.push(rotulo); return null; }
+          return n;
+        }
+        function txt(nome){
+          var v = (document.getElementById("ed-"+nome).value || "").trim();
+          return v === "" ? null : v;
+        }
+        var tipoAtiv = txt("tipo_atividade");
+        if (!tipoAtiv){ showToast("Escolha o tipo de atividade."); return; }
+
+        var valores = {
+          p_tipo_atividade: tipoAtiv,
+          p_descricao_atividade: txt("descricao_atividade"),
+          p_up: txt("up"),
+          p_trecho: txt("trecho"),
+          p_tipo: txt("tipo"),
+          p_dimensao_m: num("dimensao_m", "Dimensão"),
+          p_comprimento_m: num("comprimento_m", "Comprimento"),
+          p_largura_m: num("largura_m", "Largura"),
+          p_profundidade_cm: num("profundidade_cm", "Profundidade"),
+          p_dmt_km_inicial: num("dmt_km_inicial", "DMT inicial"),
+          p_dmt_km_final: num("dmt_km_final", "DMT final"),
+          p_observacao: txt("observacao")
+        };
+
+        if (invalidos.length){
+          showToast("Número não reconhecido em: " + invalidos.join(", ") +
+                    ". Use vírgula para decimal (ex: 1250,75). Nada foi salvo.");
+          return;
+        }
+
+        salvarEdicaoApontamento(a.id, a.numero, valores);
+      };
+    });
+  }
+
+  function salvarEdicaoApontamento(id, numero, campos){
+    campos.p_atividade_id = id;
+    supabaseClient.rpc("editar_atividade_rdo", campos).then(function(resp){
+      if (resp.error){
+        showToast(resp.error.message || "Não foi possível salvar a edição.");
+        // Mesma razão da devolução: a recusa mais provável é a tela estar
+        // defasada (o campo reenviou e o apontamento virou 'devolvido').
+        carregarRelatorios();
+        return;
+      }
+      hideModal();
+      // `voltou_pendente` vem do servidor lendo o que ele mesmo gravou, não de
+      // um palpite do navegador -- por isso dá para avisar isso com convicção.
+      var voltou = resp.data && resp.data.voltou_pendente;
+      showToast(voltou
+        ? ("Apontamento" + (numero != null ? " #" + numero : "") + " salvo. Como os dados mudaram, ele voltou para pendente de revisão.")
+        : ("Apontamento" + (numero != null ? " #" + numero : "") + " salvo."), "ok");
+      carregarRelatorios();
+    });
+  }
+
+  // `producoes` é opcional: com mais de uma linha (a "irmã"), o revisor escolhe
+  // qual delas está errada. Com uma só, não há o que escolher e a pergunta
+  // seria ruído -- cai no modal simples de sempre.
+  function pedirDevolucaoDeAtividade(id, numero, producoes){
+    var varias = producoes && producoes.length > 1;
+    if (!varias){ devolucaoSimples(id, numero); return; }
+
+    var titulo = numero != null ? ("Devolver o apontamento #" + numero + "?") : "Devolver essa atividade?";
+    var opcoes = producoes.map(function(p, i){
+      var r = rotuloProducao(p, i);
+      return '<label class="prod-opcao">'+
+        '<input type="radio" name="prod-dev" value="'+i+'">'+
+        '<span><span class="rotulo">'+esc(r.titulo)+'</span><br>'+
+        '<span class="detalhe">'+esc(r.detalhe)+'</span></span></label>';
+    }).join("");
+
+    showModal('<h3>'+esc(titulo)+'</h3>'+
+      '<p>Este apontamento tem '+producoes.length+' produções. Aponte qual delas precisa de correção — '+
+      'o encarregado corrige o apontamento inteiro no aplicativo, mas saber qual linha foi apontada evita que ele procure o erro nas outras.</p>'+
+      '<div class="prod-lista">'+
+        '<label class="prod-opcao"><input type="radio" name="prod-dev" value="" checked>'+
+        '<span><span class="rotulo">O apontamento inteiro</span><br>'+
+        '<span class="detalhe">Não aponta uma produção específica</span></span></label>'+
+        opcoes+
+      '</div>'+
+      '<textarea id="modal-prompt-texto" class="modal-textarea" placeholder="Ex: profundidade não bate com o combinado, confirme no local" rows="3"></textarea>'+
+      '<div class="actions">'+
+        '<button class="btn btn-secondary" id="modal-cancel" style="flex:1">Cancelar</button>'+
+        '<button class="btn btn-primary" id="modal-ok" style="flex:1">Devolver</button>'+
+      '</div>', true);
+
+    document.getElementById("modal-cancel").onclick = hideModal;
+    document.getElementById("modal-ok").onclick = function(){
+      var texto = document.getElementById("modal-prompt-texto").value.trim();
+      if (!texto){ showToast("Escreva o motivo antes de confirmar."); return; }
+      var marcado = document.querySelector('input[name="prod-dev"]:checked');
+      var valor = marcado ? marcado.value : "";
+      hideModal();
+      enviarDevolucao(id, numero, texto, valor === "" ? null : Number(valor));
+    };
+  }
+
+  function devolucaoSimples(id, numero){
     showPrompt(
       numero != null ? ("Devolver o apontamento #" + numero + "?") : "Devolver essa atividade?",
       "Descreva o que precisa ser corrigido. Isso volta pro PWA de quem lançou, com notificação.",
       "Ex: profundidade não bate com o combinado, confirme no local",
       "Devolver",
-      function(motivo){
-        supabaseClient.rpc("devolver_atividade_rdo", { p_atividade_id: id, p_motivo: motivo }).then(function(resp){
-          if (resp.error){
-            showToast(resp.error.message || "Não foi possível devolver a atividade.");
-            // Recarrega mesmo no erro: a recusa mais provável é o painel estar
-            // defasado (outra pessoa já devolveu, ou o campo acabou de
-            // reenviar). Sem isso a tela continua mostrando o botão errado e o
-            // revisor tenta de novo.
-            carregarRelatorios();
-            return;
-          }
-          showToast(numero != null ? ("Apontamento #" + numero + " devolvido.") : "Atividade devolvida.", "ok");
-          var usuarioId = resp.data && resp.data.usuario_id;
-          if (usuarioId) dispararPushDevolucao(usuarioId, motivo, numero);
-          carregarRelatorios();
-        });
-      }
+      function(motivo){ enviarDevolucao(id, numero, motivo, null); }
     );
+  }
+
+  function enviarDevolucao(id, numero, motivo, indiceProducao){
+    // A RPC de 3 parâmetros aceita índice nulo, então um caminho só serve para
+    // os dois casos -- não há por que manter duas chamadas diferentes.
+    supabaseClient.rpc("devolver_atividade_rdo", {
+      p_atividade_id: id, p_motivo: motivo, p_indice_producao: indiceProducao
+    }).then(function(resp){
+      if (resp.error){
+        showToast(resp.error.message || "Não foi possível devolver a atividade.");
+        // Recarrega mesmo no erro: a recusa mais provável é o painel estar
+        // defasado (outra pessoa já devolveu, ou o campo acabou de
+        // reenviar). Sem isso a tela continua mostrando o botão errado e o
+        // revisor tenta de novo.
+        carregarRelatorios();
+        return;
+      }
+      showToast(numero != null ? ("Apontamento #" + numero + " devolvido.") : "Atividade devolvida.", "ok");
+      var usuarioId = resp.data && resp.data.usuario_id;
+      if (usuarioId) dispararPushDevolucao(usuarioId, motivo, numero);
+      carregarRelatorios();
+    });
   }
 
   function carregarCadastrosAdmin(){
@@ -1600,6 +1943,10 @@
             // parede de texto repetido.
             primeiraDoApontamento: i === 0,
             totalProducoes: prods.length,
+            // O índice serve para casar com producao_devolvida_indice: no
+            // Histórico cada linha É uma produção, então é aqui -- e não no
+            // detalhe -- que apontar a linha devolvida cai naturalmente.
+            indiceProducao: i,
             fazenda: r.fazenda || "",
             cliente: r.cliente || "",
             frente: r.equipe_frente || "",
@@ -1808,6 +2155,14 @@
             ? '<button class="btn-tabela" disabled title="'+esc(a.motivo_devolucao || "Aguardando o encarregado corrigir e reenviar pelo aplicativo.")+'">Aguardando correção</button>'
             : '<button class="btn-tabela" data-action="hist-devolver" data-id="'+esc(a.id)+'" data-numero="'+esc(a.numero == null ? "" : a.numero)+'">Devolver para correção</button>');
 
+      // Corrigir aqui mesmo, sem devolver para o campo. As mesmas condições do
+      // servidor (editar_atividade_rdo): não em removido, não em devolvido --
+      // num devolvido a vez é do encarregado, e editar por cima sobrescreveria
+      // a correção que ele está fazendo.
+      var botaoEditar = (removido || devolvido)
+        ? ''
+        : '<button class="btn-tabela" data-action="hist-editar" data-id="'+esc(a.id)+'" title="Corrigir os dados deste apontamento aqui mesmo.">Editar</button> ';
+
       var p = ap.prod || {};
       var prodFmt = producaoFormatada(p);
 
@@ -1846,13 +2201,36 @@
                   : '<span class="col-sem-descricao" title="Sem descrição não há tarifa nem unidade, e a produção não pode ser calculada.">sem descrição</span>')+'</td>'+
         '<td>'+maquinaHtml+'</td>'+
         '<td class="col-medicao"'+(prodFmt.titulo?' title="'+esc(prodFmt.titulo)+'"':'')+'>'+esc(prodFmt.texto)+'</td>'+
-        '<td><span class="badge badge-'+st.classe+'"'+(st.motivo?' title="'+esc(st.motivo)+'"':'')+'>'+esc(st.rotulo)+'</span></td>'+
+        // O selo "editado" e a marca da produção apontada vivem aqui e não só
+        // no detalhe: o Histórico é onde Editar e Devolver moram agora, e o
+        // atalho para o detalhe saiu desta tela. Sinal que só existe numa tela
+        // que ninguém abre é sinal que não existe.
+        '<td><span class="badge badge-'+st.classe+'"'+(st.motivo?' title="'+esc(st.motivo)+'"':'')+'>'+esc(st.rotulo)+'</span>'+
+          (a.editado_em
+            ? ' <span class="ativ-editado" title="Editado no painel em '+esc(formatarDataHora(a.editado_em))+' — os números não são mais os que o campo enviou.">editado</span>'
+            : '')+
+          // Só quando a devolução apontou ESTA linha, e só se houver irmãs:
+          // num apontamento de uma produção só, dizer "esta é a apontada" não
+          // informa nada.
+          (devolvido && ap.totalProducoes > 1 && a.producao_devolvida_indice === ap.indiceProducao
+            ? '<div class="col-sub" style="color:var(--danger); font-weight:600;">produção apontada</div>'
+            : '')+
+        '</td>'+
         '<td><span class="badge badge-'+prio.classe+'" title="'+esc(prio.motivo)+'">'+esc(prio.rotulo)+'</span></td>'+
         '<td>'+esc(upTrecho)+'</td>'+
         '<td>'+esc(ap.frente || "—")+'</td>'+
         '<td>'+esc(ap.encarregado || "—")+'</td>'+
+        // Só Editar e Devolver. Havia aqui um terceiro botão rotulado "Editar"
+        // que na verdade era `hist-abrir` -- levava à tela de detalhe do
+        // relatório inteiro e nunca editou nada. Saiu em 17/09 por decisão do
+        // Fábio: "o botão abrir na verdade não é para existir".
+        //
+        // O detalhamento de UM apontamento vai voltar por outro caminho (botão
+        // direito do mouse, e na tela de Relatórios, não aqui) -- depois que
+        // aquela tela for polida. Não é perda de acesso: a tela de Relatórios
+        // já leva ao detalhe do relatório por dois caminhos próprios.
         '<td class="col-acoes">'+(repetida ? '' :
-          '<button class="btn-tabela" data-action="hist-abrir" data-rel="'+esc(ap.rel.id)+'">Editar</button> '+
+          botaoEditar+
           botaoDevolver)+
         '</td>'+
       '</tr>';
@@ -1885,20 +2263,24 @@
     ligarFiltro("h-encarregado", "encarregado", "onchange");
     ligarFiltro("h-status", "status", "onchange");
 
-    document.querySelectorAll('[data-action="hist-abrir"]').forEach(function(btn){
-      btn.onclick = function(){
-        App.relatorioAtualId = btn.getAttribute("data-rel");
-        App.tela = "detalhe";
-        render();
-        var rel = relatorioAtual();
-        if (rel) prepararFotosDoRelatorio(rel, render);
-      };
-    });
 
     document.querySelectorAll('[data-action="hist-devolver"]').forEach(function(btn){
       btn.onclick = function(){
+        var id = btn.getAttribute("data-id");
         var numeroTxt = btn.getAttribute("data-numero");
-        pedirDevolucaoDeAtividade(btn.getAttribute("data-id"), numeroTxt ? Number(numeroTxt) : null);
+        var a = atividadePorId(id);
+        // Mesma escolha de produção da tela de detalhe: o Histórico mostra uma
+        // linha por produção, então é justamente aqui que o revisor está
+        // olhando a linha irmã que quer apontar.
+        pedirDevolucaoDeAtividade(id, numeroTxt ? Number(numeroTxt) : null,
+                                  a ? a.producoes : null);
+      };
+    });
+    document.querySelectorAll('[data-action="hist-editar"]').forEach(function(btn){
+      btn.onclick = function(){
+        var a = atividadePorId(btn.getAttribute("data-id"));
+        if (!a){ showToast("Recarregue a tela: esse apontamento não está mais na lista."); return; }
+        abrirEdicaoApontamento(a);
       };
     });
   }
@@ -2032,11 +2414,33 @@
       // O número é a referência que o revisor e o operador usam para falar do
       // mesmo apontamento -- por telefone, no rádio ou num bilhete.
       var num = a.numero != null ? '<span class="ativ-num">#'+esc(String(a.numero))+'</span> ' : '';
+
+      // Editado no painel: o revisor seguinte precisa saber que o que está na
+      // tela não é literalmente o que o campo mandou, senão a conferência com
+      // a foto não fecha e ninguém entende por quê.
+      var seloEditado = a.editado_em
+        ? '<span class="ativ-editado" title="Editado no painel em '+esc(formatarDataHora(a.editado_em))+'">editado no painel</span>'
+        : '';
+
+      // Qual produção foi apontada na devolução. Só com mais de uma linha --
+      // com uma só, dizer "a produção 1" não informa nada.
+      var avisoProducao = "";
+      if (!removida && status === "devolvido" && a.producao_devolvida_indice != null
+          && (a.producoes || []).length > 1){
+        var pd = a.producoes[a.producao_devolvida_indice];
+        if (pd){
+          var rp = rotuloProducao(pd, a.producao_devolvida_indice);
+          avisoProducao = '<div class="prod-devolvida-aviso">Produção apontada: '+
+            esc(rp.titulo)+' — '+esc(rp.detalhe)+'</div>';
+        }
+      }
+
       return '<div class="ativ-detalhe'+(removida ? ' removida' : '')+'" data-atividade-id="'+a.id+'">'+
-        '<div class="top"><span class="tipo">'+num+esc(a.tipo_atividade)+'</span>'+badge+'</div>'+
+        '<div class="top"><span class="tipo">'+num+esc(a.tipo_atividade)+'</span>'+
+          '<span style="display:flex; gap:6px; align-items:center;">'+seloEditado+badge+'</span></div>'+
         renderResumoAtividade(a)+
         (fotos ? '<div class="fotos-grid">'+fotos+'</div>' : '')+
-        (!removida && status === "devolvido" && a.motivo_devolucao ? '<div class="ativ-motivo-devolucao">Motivo da devolução: '+esc(a.motivo_devolucao)+'</div>' : '')+
+        (!removida && status === "devolvido" && a.motivo_devolucao ? '<div class="ativ-motivo-devolucao">Motivo da devolução: '+esc(a.motivo_devolucao)+avisoProducao+'</div>' : '')+
         avisoRemocao+
         // Sem botões nas removidas: validar ou devolver algo que não está mais
         // no aparelho não leva a lugar nenhum -- o operador não veria. O banco
@@ -2058,6 +2462,14 @@
             (status === "devolvido"
               ? '<button class="btn-tabela" disabled title="Aguardando o encarregado corrigir e reenviar pelo aplicativo.">Aguardando correção</button>'
               : '<button class="btn-tabela perigo" data-id="'+a.id+'" data-action="devolver-atividade">Devolver</button>')+
+            // Editar só em pendente/validado, espelhando o que o servidor
+            // aceita (editar_atividade_rdo). Num devolvido a vez é do campo:
+            // editar por cima sobrescreveria a correção que o encarregado está
+            // fazendo agora, e o servidor recusa -- oferecer o botão só levaria
+            // ao erro.
+            (status === "devolvido"
+              ? ''
+              : '<button class="btn-tabela" data-id="'+a.id+'" data-action="editar-atividade" title="Corrigir os dados deste apontamento aqui, sem devolver para o campo.">Editar</button>')+
           '</div>')+
       '</div>';
     }).join("");
@@ -2081,16 +2493,18 @@
     document.querySelectorAll('[data-action="devolver-atividade"]').forEach(function(btn){
       btn.onclick = function(){
         var id = btn.getAttribute("data-id");
+        var a = atividadePorId(id);
         // Número do apontamento, para a notificação dizer QUAL foi devolvido e
         // para uma devolução não apagar a notificação da anterior.
-        var ativNumero = null;
-        var relAtual = relatorioAtual();
-        if (relAtual){
-          (relAtual.atividades || []).forEach(function(x){
-            if (x.id === id && x.numero != null) ativNumero = x.numero;
-          });
-        }
-        pedirDevolucaoDeAtividade(id, ativNumero);
+        pedirDevolucaoDeAtividade(id, a && a.numero != null ? a.numero : null,
+                                  a ? a.producoes : null);
+      };
+    });
+    document.querySelectorAll('[data-action="editar-atividade"]').forEach(function(btn){
+      btn.onclick = function(){
+        var a = atividadePorId(btn.getAttribute("data-id"));
+        if (!a){ showToast("Recarregue a tela: esse apontamento não está mais na lista."); return; }
+        abrirEdicaoApontamento(a);
       };
     });
     document.querySelectorAll(".fotos-grid img").forEach(function(img){
