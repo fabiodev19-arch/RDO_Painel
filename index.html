@@ -1361,35 +1361,40 @@
     });
   }
 
-  // `indicePadrao`: quando o clique partiu de uma linha específica do
-  // Histórico (cada linha já tem seu próprio botão Devolver, e sabe a própria
-  // posição em `producoes`), NÃO faz sentido perguntar de novo qual produção
-  // é -- o revisor já escolheu isso ao clicar naquela linha. Pedido do Fábio:
-  // "já que estamos selecionando a produção que queremos devolver, é só
-  // seguir normal com o fluxo de devolução sem precisar mostrar todas as
-  // produções vinculadas". Cai direto no prompt de sempre, só com o motivo.
+  // `maquinaUuidPadrao`: quando o clique partiu de uma linha específica do
+  // Histórico (cada linha já tem seu próprio botão Devolver, e sabe o uuid da
+  // própria máquina), NÃO faz sentido perguntar de novo qual produção é -- o
+  // revisor já escolheu isso ao clicar naquela linha. Pedido do Fábio: "já
+  // que estamos selecionando a produção que queremos devolver, é só seguir
+  // normal com o fluxo de devolução sem precisar mostrar todas as produções
+  // vinculadas". Cai direto no prompt de sempre, só com o motivo.
+  //
+  // Por que uuid e não a posição na lista (como nasceu, mais cedo no mesmo
+  // dia): atividade_maquinas é recriada a cada sincronização, e a posição não
+  // sobrevive a uma correção -- o uuid de dispositivo da máquina, sim (o
+  // servidor agora faz upsert por ele em vez de apagar e recriar).
   //
   // A lista de escolha (mais abaixo) só sobra pra quem NÃO sabe ainda qual
   // produção está em jogo -- hoje, só a tela de detalhe, que devolve por
   // atividade inteira sem granularidade de linha (nenhum botão lá informa
-  // um índice).
+  // um uuid de máquina).
   //
-  // `producoes` é opcional: com mais de uma linha e sem índice conhecido, o
+  // `producoes` é opcional: com mais de uma linha e sem uuid conhecido, o
   // revisor escolhe qual delas está errada. Com uma só, não há o que
   // escolher e a pergunta seria ruído -- cai no modal simples de sempre.
-  function pedirDevolucaoDeAtividade(id, numero, producoes, indicePadrao){
-    if (indicePadrao != null){ devolucaoSimples(id, numero, indicePadrao); return; }
+  function pedirDevolucaoDeAtividade(id, numero, producoes, maquinaUuidPadrao){
+    if (maquinaUuidPadrao != null){ devolucaoSimples(id, numero, maquinaUuidPadrao); return; }
 
     var varias = producoes && producoes.length > 1;
     if (!varias){ devolucaoSimples(id, numero, null); return; }
 
-    // Chegar aqui já garante indicePadrao nulo (o early return de cima cobre
-    // o caso conhecido) -- "o apontamento inteiro" nasce marcado sempre.
+    // Chegar aqui já garante maquinaUuidPadrao nulo (o early return de cima
+    // cobre o caso conhecido) -- "o apontamento inteiro" nasce marcado sempre.
     var titulo = numero != null ? ("Devolver o apontamento #" + numero + "?") : "Devolver essa atividade?";
     var opcoes = producoes.map(function(p, i){
       var r = rotuloProducao(p, i);
       return '<label class="prod-opcao">'+
-        '<input type="radio" name="prod-dev" value="'+i+'">'+
+        '<input type="radio" name="prod-dev" value="'+esc(p.maquina_uuid||"")+'">'+
         '<span><span class="rotulo">'+esc(r.titulo)+'</span><br>'+
         '<span class="detalhe">'+esc(r.detalhe)+'</span></span></label>';
     }).join("");
@@ -1416,30 +1421,30 @@
       var marcado = document.querySelector('input[name="prod-dev"]:checked');
       var valor = marcado ? marcado.value : "";
       hideModal();
-      enviarDevolucao(id, numero, texto, valor === "" ? null : Number(valor));
+      enviarDevolucao(id, numero, texto, valor === "" ? null : valor);
     };
   }
 
-  // indiceProducao: null quando devolve o apontamento sem apontar uma linha
-  // (tela de detalhe, ou Histórico com uma produção só); um número quando o
+  // maquinaUuid: null quando devolve o apontamento sem apontar uma linha
+  // (tela de detalhe, ou Histórico com uma produção só); um uuid quando o
   // clique já veio de uma linha específica do Histórico -- nesse caso o
   // prompt é o mesmo de sempre, só o motivo, sem perguntar de novo qual
   // produção é.
-  function devolucaoSimples(id, numero, indiceProducao){
+  function devolucaoSimples(id, numero, maquinaUuid){
     showPrompt(
       numero != null ? ("Devolver o apontamento #" + numero + "?") : "Devolver essa atividade?",
       "Descreva o que precisa ser corrigido. Isso volta pro PWA de quem lançou, com notificação.",
       "Ex: profundidade não bate com o combinado, confirme no local",
       "Devolver",
-      function(motivo){ enviarDevolucao(id, numero, motivo, indiceProducao); }
+      function(motivo){ enviarDevolucao(id, numero, motivo, maquinaUuid); }
     );
   }
 
-  function enviarDevolucao(id, numero, motivo, indiceProducao){
-    // A RPC de 3 parâmetros aceita índice nulo, então um caminho só serve para
+  function enviarDevolucao(id, numero, motivo, maquinaUuid){
+    // A RPC de 3 parâmetros aceita uuid nulo, então um caminho só serve para
     // os dois casos -- não há por que manter duas chamadas diferentes.
     supabaseClient.rpc("devolver_atividade_rdo", {
-      p_atividade_id: id, p_motivo: motivo, p_indice_producao: indiceProducao
+      p_atividade_id: id, p_motivo: motivo, p_maquina_uuid: maquinaUuid
     }).then(function(resp){
       if (resp.error){
         showToast(resp.error.message || "Não foi possível devolver a atividade.");
@@ -1965,10 +1970,6 @@
             // parede de texto repetido.
             primeiraDoApontamento: i === 0,
             totalProducoes: prods.length,
-            // O índice serve para casar com producao_devolvida_indice: no
-            // Histórico cada linha É uma produção, então é aqui -- e não no
-            // detalhe -- que apontar a linha devolvida cai naturalmente.
-            indiceProducao: i,
             fazenda: r.fazenda || "",
             cliente: r.cliente || "",
             frente: r.equipe_frente || "",
@@ -2047,17 +2048,22 @@
   // em TODAS as linhas irmãs faz parecer que o lançamento inteiro está
   // errado, quando só uma medida foi questionada.
   //
-  // `producao_devolvida_indice == null` cobre o caso antigo (devolução sem
-  // apontar uma linha, ou vinda da tela de detalhe) e o de uma produção só --
+  // `producao_devolvida_maquina_uuid == null` cobre o caso de devolução sem
+  // apontar uma linha (vinda da tela de detalhe) e o de uma produção só --
   // aí não há o que distinguir, e o apontamento inteiro mostra Devolvido como
   // sempre. Isto NÃO muda o que está no servidor: a atividade continua
   // 'devolvido' de verdade, e por isso o botão de Devolver segue travado em
   // toda linha irmã -- só a ETIQUETA muda, não a trava.
+  //
+  // Compara pelo uuid de dispositivo da máquina, não por posição na lista
+  // (como nasceu, mais cedo no mesmo dia): atividade_maquinas é recriada a
+  // cada sincronização, e a posição não sobrevive a uma correção -- o uuid
+  // sim, porque o servidor faz upsert por ele.
   function ehADevolvidaNestaLinha(ap){
     var a = ap.ativ;
     if (a.status_revisao !== "devolvido") return false;
-    if (ap.totalProducoes <= 1 || a.producao_devolvida_indice == null) return true;
-    return a.producao_devolvida_indice === ap.indiceProducao;
+    if (ap.totalProducoes <= 1 || a.producao_devolvida_maquina_uuid == null) return true;
+    return ap.prod && ap.prod.maquina_uuid === a.producao_devolvida_maquina_uuid;
   }
 
   function prioridadeApontamento(ap){
@@ -2207,15 +2213,16 @@
       // mesma regra de alternância da tela de detalhe, e quem garante é o
       // banco (trava_devolucao_alternada.sql). Aqui é só não convidar ao
       // clique que o servidor vai recusar.
-      // data-indice: qual produção esta LINHA representa, para o modal de
-      // devolução já nascer com ela marcada -- clicar "Devolver" na linha da
-      // motoniveladora não deve obrigar o revisor a procurar de novo qual
-      // linha era essa numa lista de rádio.
+      // data-maquina-uuid: qual produção esta LINHA representa, para o modal
+      // de devolução já nascer com ela marcada -- clicar "Devolver" na linha
+      // da motoniveladora não deve obrigar o revisor a procurar de novo qual
+      // linha era essa numa lista de rádio. Vazio na "padrão de obra" (uma
+      // produção só, sem máquina própria) -- não há o que apontar ali.
       var botaoDevolver = removido
         ? '<button class="btn-tabela" disabled title="Apontamento removido no aplicativo pelo operador.">Devolver</button>'
         : (devolvido
             ? '<button class="btn-tabela" disabled title="'+esc(a.motivo_devolucao || "Aguardando o encarregado corrigir e reenviar pelo aplicativo.")+'">Aguardando correção</button>'
-            : '<button class="btn-tabela" data-action="hist-devolver" data-id="'+esc(a.id)+'" data-numero="'+esc(a.numero == null ? "" : a.numero)+'" data-indice="'+esc(ap.indiceProducao)+'">Devolver para correção</button>');
+            : '<button class="btn-tabela" data-action="hist-devolver" data-id="'+esc(a.id)+'" data-numero="'+esc(a.numero == null ? "" : a.numero)+'" data-maquina-uuid="'+esc(ap.prod && ap.prod.maquina_uuid || "")+'">Devolver para correção</button>');
 
       // Corrigir aqui mesmo, sem devolver para o campo. As mesmas condições do
       // servidor (editar_atividade_rdo): não em removido, não em devolvido --
@@ -2250,8 +2257,8 @@
       // grupo -- não é 4 ações diferentes, é a mesma ação alcançável de
       // qualquer linha. Para Devolver isso é uma vantagem, não uma
       // duplicata: cada botão já nasce com a própria produção pré-marcada no
-      // modal (data-indice), então devolver a partir da linha certa poupa o
-      // revisor de procurar de novo qual linha era.
+      // modal (data-maquina-uuid), então devolver a partir da linha certa
+      // poupa o revisor de procurar de novo qual linha era.
       var repetida = !ap.primeiraDoApontamento;
 
       return '<tr class="'+(removido?"linha-removida ":"")+(repetida?"linha-irma":"")+'">'+
@@ -2273,10 +2280,11 @@
           (a.editado_em
             ? ' <span class="ativ-editado" title="Editado no painel em '+esc(formatarDataHora(a.editado_em))+' — os números não são mais os que o campo enviou.">editado</span>'
             : '')+
-          // Só quando a devolução apontou ESTA linha, e só se houver irmãs:
-          // num apontamento de uma produção só, dizer "esta é a apontada" não
-          // informa nada.
-          (devolvido && ap.totalProducoes > 1 && a.producao_devolvida_indice === ap.indiceProducao
+          // Só quando a devolução apontou ESTA linha (pelo uuid da máquina),
+          // e só se houver irmãs: num apontamento de uma produção só, dizer
+          // "esta é a apontada" não informa nada.
+          (devolvido && ap.totalProducoes > 1 && a.producao_devolvida_maquina_uuid != null
+              && ap.prod && ap.prod.maquina_uuid === a.producao_devolvida_maquina_uuid
             ? '<div class="col-sub" style="color:var(--danger); font-weight:600;">produção apontada</div>'
             : '')+
         '</td>'+
@@ -2289,8 +2297,9 @@
         // apontamentos tenham vindo de um único lançamento"). As duas ações
         // continuam mirando a MESMA atividade em qualquer linha do grupo --
         // não é 4 ações diferentes, é a mesma ação alcançável de qualquer
-        // linha, o que é útil de verdade pro Devolver: o índice desta linha
-        // já nasce marcado no modal (ver data-indice em botaoDevolver).
+        // linha, o que é útil de verdade pro Devolver: o uuid da máquina
+        // desta linha já nasce marcado no modal (ver data-maquina-uuid em
+        // botaoDevolver).
         //
         // Havia aqui um terceiro botão rotulado "Editar" que na verdade era
         // `hist-abrir` -- levava à tela de detalhe do relatório inteiro e
@@ -2336,16 +2345,16 @@
       btn.onclick = function(){
         var id = btn.getAttribute("data-id");
         var numeroTxt = btn.getAttribute("data-numero");
-        var indiceTxt = btn.getAttribute("data-indice");
+        var maquinaUuidTxt = btn.getAttribute("data-maquina-uuid");
         var a = atividadePorId(id);
         // Mesma escolha de produção da tela de detalhe: o Histórico mostra uma
         // linha por produção, então é justamente aqui que o revisor está
-        // olhando a linha irmã que quer apontar. O índice da PRÓPRIA linha
+        // olhando a linha irmã que quer apontar. O uuid da PRÓPRIA máquina
         // clicada já nasce marcado no modal -- não precisa escolher de novo o
         // que já estava na tela.
         pedirDevolucaoDeAtividade(id, numeroTxt ? Number(numeroTxt) : null,
                                   a ? a.producoes : null,
-                                  (indiceTxt !== null && indiceTxt !== "") ? Number(indiceTxt) : null);
+                                  (maquinaUuidTxt !== null && maquinaUuidTxt !== "") ? maquinaUuidTxt : null);
       };
     });
     document.querySelectorAll('[data-action="hist-editar"]').forEach(function(btn){
@@ -2495,13 +2504,19 @@
         : '';
 
       // Qual produção foi apontada na devolução. Só com mais de uma linha --
-      // com uma só, dizer "a produção 1" não informa nada.
+      // com uma só, dizer "a produção 1" não informa nada. Achada pelo uuid
+      // de dispositivo da máquina, não por posição: a posição não sobrevive a
+      // uma sincronização (atividade_maquinas é recriada), o uuid sim.
       var avisoProducao = "";
-      if (!removida && status === "devolvido" && a.producao_devolvida_indice != null
+      if (!removida && status === "devolvido" && a.producao_devolvida_maquina_uuid != null
           && (a.producoes || []).length > 1){
-        var pd = a.producoes[a.producao_devolvida_indice];
+        var idxPd = -1;
+        (a.producoes || []).forEach(function(prod, i){
+          if (prod.maquina_uuid === a.producao_devolvida_maquina_uuid) idxPd = i;
+        });
+        var pd = idxPd >= 0 ? a.producoes[idxPd] : null;
         if (pd){
-          var rp = rotuloProducao(pd, a.producao_devolvida_indice);
+          var rp = rotuloProducao(pd, idxPd);
           avisoProducao = '<div class="prod-devolvida-aviso">Produção apontada: '+
             esc(rp.titulo)+' — '+esc(rp.detalhe)+'</div>';
         }
