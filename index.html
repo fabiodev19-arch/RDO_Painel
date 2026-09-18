@@ -2030,6 +2030,21 @@
     return Math.floor((Date.now() - d.getTime()) / 86400000);
   }
 
+  // Retenção local do PWA (18/09): depois de DIAS_RETENCAO_LOCAL dias
+  // sincronizado e sem correção pendente, o aparelho apaga o relatório
+  // sozinho (ver PWA/RDO/RDO/index.html, podarRelatoriosAntigos). Passado
+  // esse prazo, devolver aqui poderia apontar pra um dado que já não existe
+  // mais no aparelho do encarregado -- a notificação chegaria sem ter o que
+  // corrigir. O banco também recusa (retencao_local_pwa.sql); isto aqui só
+  // evita convidar ao clique que o servidor vai barrar. O mesmo número (30)
+  // precisa concordar nos três lugares.
+  var DIAS_RETENCAO_LOCAL = 30;
+
+  function apontamentoForaDoPrazoLocal(sincronizadoEm){
+    var dias = diasDesde(sincronizadoEm);
+    return dias != null && dias >= DIAS_RETENCAO_LOCAL;
+  }
+
   // Prioridade = urgência DE REVISÃO, não importância do serviço.
   //
   // A coluna existe porque o painel de referência tem uma, mas o RDO não tem
@@ -2218,11 +2233,14 @@
       // da motoniveladora não deve obrigar o revisor a procurar de novo qual
       // linha era essa numa lista de rádio. Vazio na "padrão de obra" (uma
       // produção só, sem máquina própria) -- não há o que apontar ali.
+      var foraDoPrazo = apontamentoForaDoPrazoLocal(ap.sincronizadoEm);
       var botaoDevolver = removido
         ? '<button class="btn-tabela" disabled title="Apontamento removido no aplicativo pelo operador.">Devolver</button>'
         : (devolvido
             ? '<button class="btn-tabela" disabled title="'+esc(a.motivo_devolucao || "Aguardando o encarregado corrigir e reenviar pelo aplicativo.")+'">Aguardando correção</button>'
-            : '<button class="btn-tabela" data-action="hist-devolver" data-id="'+esc(a.id)+'" data-numero="'+esc(a.numero == null ? "" : a.numero)+'" data-maquina-uuid="'+esc(ap.prod && ap.prod.maquina_uuid || "")+'">Devolver para correção</button>');
+            : (foraDoPrazo
+                ? '<button class="btn-tabela" disabled title="Sincronizado há '+diasDesde(ap.sincronizadoEm)+' dias -- o dado local já pode ter sido removido do aparelho do encarregado. Use Editar para corrigir direto pelo painel.">Devolver indisponível</button>'
+                : '<button class="btn-tabela" data-action="hist-devolver" data-id="'+esc(a.id)+'" data-numero="'+esc(a.numero == null ? "" : a.numero)+'" data-maquina-uuid="'+esc(ap.prod && ap.prod.maquina_uuid || "")+'">Devolver para correção</button>'));
 
       // Corrigir aqui mesmo, sem devolver para o campo. As mesmas condições do
       // servidor (editar_atividade_rdo): não em removido, não em devolvido --
@@ -2548,7 +2566,9 @@
             // (devolver_atividade_rdo), e aqui o botão nem convida ao clique.
             (status === "devolvido"
               ? '<button class="btn-tabela" disabled title="Aguardando o encarregado corrigir e reenviar pelo aplicativo.">Aguardando correção</button>'
-              : '<button class="btn-tabela perigo" data-id="'+a.id+'" data-action="devolver-atividade">Devolver</button>')+
+              : (apontamentoForaDoPrazoLocal(r.sincronizado_em)
+                  ? '<button class="btn-tabela" disabled title="Sincronizado há '+diasDesde(r.sincronizado_em)+' dias -- o dado local já pode ter sido removido do aparelho do encarregado. Use Editar para corrigir direto pelo painel.">Devolver indisponível</button>'
+                  : '<button class="btn-tabela perigo" data-id="'+a.id+'" data-action="devolver-atividade">Devolver</button>'))+
             // Editar só em pendente/validado, espelhando o que o servidor
             // aceita (editar_atividade_rdo). Num devolvido a vez é do campo:
             // editar por cima sobrescreveria a correção que o encarregado está
