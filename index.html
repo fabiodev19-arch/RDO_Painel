@@ -2081,9 +2081,15 @@
     return ap.prod && ap.prod.maquina_uuid === a.producao_devolvida_maquina_uuid;
   }
 
+  // 18/09: a MESMA regra vale um degrau abaixo, na produção. Omitir uma
+  // máquina no reenvio agora marca `excluido_em` nela (protecao_exclusao_
+  // devolucao.sql) em vez de apagar -- o painel precisa mostrar isso na
+  // LINHA certa, senão o revisor vê "Pendente" numa produção que já não
+  // existe mais no aparelho do encarregado.
   function prioridadeApontamento(ap){
     var a = ap.ativ;
     if (a.excluido_em) return { classe:"baixa", rotulo:"Baixa", motivo:"Removido no aparelho: não espera revisão." };
+    if (ap.prod && ap.prod.excluido_em) return { classe:"baixa", rotulo:"Baixa", motivo:"Produção removida no aparelho: não espera revisão." };
     if (ehADevolvidaNestaLinha(ap)) return { classe:"baixa", rotulo:"Baixa", motivo:"Devolvido: aguardando correção do encarregado." };
     if (a.status_revisao === "validado") return { classe:"baixa", rotulo:"Baixa", motivo:"Já validado." };
     var dias = diasDesde(ap.sincronizadoEm || ap.data);
@@ -2099,6 +2105,14 @@
     if (a.excluido_em){
       return { classe:"removida", rotulo:"Removido no aparelho",
         motivo:"O operador removeu do aplicativo" + (a.status_anterior_exclusao ? " (estava " + a.status_anterior_exclusao + ")" : "") + ". A linha e as fotos continuam no banco." };
+    }
+    // A atividade continua de pé (pendente/validada/devolvida) -- só ESTA
+    // produção/máquina saiu do reenvio do aparelho. Marca por si, sem herdar
+    // o status da atividade: dizer "Pendente" aqui seria cobrar revisão de
+    // uma linha que o encarregado não tem mais como corrigir.
+    if (ap.prod && ap.prod.excluido_em){
+      return { classe:"removida", rotulo:"Produção removida",
+        motivo:"O operador removeu esta produção do aplicativo. A linha e as fotos continuam no banco." };
     }
     if (a.status_revisao === "validado") return { classe:"validado", rotulo:"Validado", motivo:"" };
     if (ehADevolvidaNestaLinha(ap)) return { classe:"devolvido", rotulo:"Devolvido", motivo: a.motivo_devolucao || "" };
@@ -2222,7 +2236,11 @@
       var prio = prioridadeApontamento(ap);
       var st = statusApontamento(ap);
       var removido = !!a.excluido_em;
-      var devolvido = !removido && a.status_revisao === "devolvido";
+      // Produção removida (18/09): a atividade em si segue de pé, mas ESTA
+      // máquina saiu do aparelho. Não é a mesma coisa que a atividade inteira
+      // sumir -- por isso a variável própria, em vez de somar em `removido`.
+      var producaoRemovida = !removido && !!(ap.prod && ap.prod.excluido_em);
+      var devolvido = !removido && !producaoRemovida && a.status_revisao === "devolvido";
 
       // O botão de devolver fica travado enquanto a bola está com o campo --
       // mesma regra de alternância da tela de detalhe, e quem garante é o
@@ -2233,20 +2251,27 @@
       // da motoniveladora não deve obrigar o revisor a procurar de novo qual
       // linha era essa numa lista de rádio. Vazio na "padrão de obra" (uma
       // produção só, sem máquina própria) -- não há o que apontar ali.
+      //
+      // Produção removida também trava (mesmo raciocínio): devolver_atividade_rdo
+      // recusa uuid de máquina já excluída (protecao_exclusao_devolucao.sql),
+      // então oferecer o botão aqui só levaria a um erro do servidor.
       var foraDoPrazo = apontamentoForaDoPrazoLocal(ap.sincronizadoEm);
       var botaoDevolver = removido
         ? '<button class="btn-tabela" disabled title="Apontamento removido no aplicativo pelo operador.">Devolver</button>'
-        : (devolvido
-            ? '<button class="btn-tabela" disabled title="'+esc(a.motivo_devolucao || "Aguardando o encarregado corrigir e reenviar pelo aplicativo.")+'">Aguardando correção</button>'
-            : (foraDoPrazo
-                ? '<button class="btn-tabela" disabled title="Sincronizado há '+diasDesde(ap.sincronizadoEm)+' dias -- o dado local já pode ter sido removido do aparelho do encarregado. Use Editar para corrigir direto pelo painel.">Devolver indisponível</button>'
-                : '<button class="btn-tabela" data-action="hist-devolver" data-id="'+esc(a.id)+'" data-numero="'+esc(a.numero == null ? "" : a.numero)+'" data-maquina-uuid="'+esc(ap.prod && ap.prod.maquina_uuid || "")+'">Devolver para correção</button>'));
+        : (producaoRemovida
+            ? '<button class="btn-tabela" disabled title="O operador removeu esta produção do aplicativo -- não há mais o que devolver aqui.">Produção removida</button>'
+            : (devolvido
+                ? '<button class="btn-tabela" disabled title="'+esc(a.motivo_devolucao || "Aguardando o encarregado corrigir e reenviar pelo aplicativo.")+'">Aguardando correção</button>'
+                : (foraDoPrazo
+                    ? '<button class="btn-tabela" disabled title="Sincronizado há '+diasDesde(ap.sincronizadoEm)+' dias -- o dado local já pode ter sido removido do aparelho do encarregado. Use Editar para corrigir direto pelo painel.">Devolver indisponível</button>'
+                    : '<button class="btn-tabela" data-action="hist-devolver" data-id="'+esc(a.id)+'" data-numero="'+esc(a.numero == null ? "" : a.numero)+'" data-maquina-uuid="'+esc(ap.prod && ap.prod.maquina_uuid || "")+'">Devolver para correção</button>')));
 
       // Corrigir aqui mesmo, sem devolver para o campo. As mesmas condições do
       // servidor (editar_atividade_rdo): não em removido, não em devolvido --
       // num devolvido a vez é do encarregado, e editar por cima sobrescreveria
-      // a correção que ele está fazendo.
-      var botaoEditar = (removido || devolvido)
+      // a correção que ele está fazendo. Produção removida entra na mesma
+      // régua: a linha some do aparelho, editar aqui não devolveria nada a ela.
+      var botaoEditar = (removido || devolvido || producaoRemovida)
         ? ''
         : '<button class="btn-tabela" data-action="hist-editar" data-id="'+esc(a.id)+'" title="Corrigir os dados deste apontamento aqui mesmo.">Editar</button> ';
 
@@ -2279,7 +2304,7 @@
       // poupa o revisor de procurar de novo qual linha era.
       var repetida = !ap.primeiraDoApontamento;
 
-      return '<tr class="'+(removido?"linha-removida ":"")+(repetida?"linha-irma":"")+'">'+
+      return '<tr class="'+((removido||producaoRemovida)?"linha-removida ":"")+(repetida?"linha-irma":"")+'">'+
         '<td class="col-num">'+(a.numero != null ? "#"+esc(a.numero) : "—")+
           (ap.totalProducoes > 1 ? '<div class="col-sub">'+ap.totalProducoes+' linhas</div>' : '')+'</td>'+
         '<td class="col-fazenda">'+esc(ap.fazenda || "—")+'</td>'+
