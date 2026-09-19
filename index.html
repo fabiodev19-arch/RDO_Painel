@@ -17,13 +17,19 @@
     --radius:4px; --radius-sm:3px;
     --shadow:none;
   }
+  /* 19/09: era azul-marinho (canal B > G > R em --bg/--surface/--border, e
+     --brand/--brand-dark nunca eram redefinidos aqui -- ficavam com o azul
+     do :root). Pedido do Fábio, vendo um painel de referência: escuro de
+     verdade, sem tom de azul -- neutros com R≈G≈B, e --brand ganha um tom
+     dourado (variante clara do --accent) em vez de herdar o azul do light. */
   html[data-theme="dark"]{
-    --bg:#0B1620; --surface:#112430; --surface-2:#16303F; --surface-3:#1C3B4D;
-    --border:#22404F; --text:#EAF2F6; --text-dim:#8FA6B2;
+    --bg:#0C0C0D; --surface:#18181A; --surface-2:#1F1F22; --surface-3:#28282B;
+    --border:#333336; --text:#F2F2F0; --text-dim:#9B9B9E;
+    --brand:#D8873A; --brand-dark:#B56B26;
     --accent:#E8871E; --accent-dark:#C96010;
     --success:#2FA65A; --success-bg:rgba(47,166,90,.15);
     --danger:#D6534A; --danger-bg:rgba(214,83,74,.15);
-    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --shadow:0 10px 30px rgba(0,0,0,.5);
   }
   *{box-sizing:border-box;}
   svg{width:18px; height:18px; flex-shrink:0;}
@@ -210,6 +216,47 @@
   /* Apontamento removido no aparelho continua na lista, riscado: sumir com ele
      esconderia justamente o caso que o revisor precisa enxergar. */
   .tabela-hist tr.linha-removida td.col-fazenda{text-decoration:line-through; color:var(--text-dim);}
+  /* 19/09: linha em destaque no card acima (clique na tabela ou no mapa). */
+  .tabela-hist tbody tr.linha-selecionada td{background:var(--surface-3);}
+  .tabela-hist tbody tr.linha-selecionada:hover td{background:var(--surface-3);}
+  .tabela-hist tbody tr{cursor:pointer;}
+  .tabela-hist tbody tr td.col-acoes{cursor:default;}
+
+  /* ---------- Card de destaque + mapa (Histórico), 19/09 ----------
+     Estrutura do painel de referência que o Fábio mandou: KPIs, depois um
+     card com o apontamento em foco lado a lado com o mapa, e só então a
+     tabela cheia. Em telas estreitas empilha (o painel é de mesa, mas 1024px
+     já é apertado para 2 colunas de largura mínima 320px+resto). */
+  .hist-destaque{display:grid; grid-template-columns:minmax(320px,420px) 1fr; gap:16px; margin-bottom:22px; align-items:stretch;}
+  @media (max-width:900px){ .hist-destaque{grid-template-columns:1fr;} }
+  .hist-destaque .mapa-wrap{margin-bottom:0;}
+  .hist-destaque .mapa-leaflet{height:100%; min-height:360px;}
+
+  .hist-detalhe-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:18px; display:flex; flex-direction:column; gap:14px;
+  }
+  .hist-detalhe-head{display:flex; align-items:flex-start; justify-content:space-between; gap:10px;}
+  .hist-detalhe-titulo{font-size:16px; font-weight:700; margin:0 0 2px;}
+  .hist-detalhe-sub{font-size:12.5px; color:var(--text-dim); margin:0;}
+  .hist-detalhe-num{font-size:26px; font-weight:800; color:var(--text-dim); white-space:nowrap;}
+  .hist-detalhe-badges{display:flex; gap:6px; flex-wrap:wrap;}
+  .hist-detalhe-grid{
+    display:grid; grid-template-columns:1fr 1fr; gap:12px 16px; font-size:13.5px;
+  }
+  .hist-detalhe-grid label{display:block; font-size:11px; color:var(--text-dim); margin-bottom:2px;}
+  .hist-detalhe-fatos{background:var(--surface-2); border-radius:var(--radius-sm); padding:12px 14px;}
+  .hist-detalhe-fatos-titulo{font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.04em; margin:0 0 8px;}
+  .fato-linha{display:flex; justify-content:space-between; font-size:12.5px; padding:3px 0;}
+  .fato-linha span:last-child{color:var(--text-dim);}
+  .fato-barra{height:4px; background:var(--surface-3); border-radius:2px; margin:2px 0 8px; overflow:hidden;}
+  .fato-barra-fill{height:100%; background:var(--accent); border-radius:2px;}
+  .hist-detalhe-nota{
+    background:var(--surface-2); border-left:3px solid var(--brand); border-radius:var(--radius-sm);
+    padding:10px 12px; font-size:13px; line-height:1.5;
+  }
+  .hist-detalhe-nota.aviso{border-left-color:var(--danger);}
+  .hist-detalhe-nota label{display:block; font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.03em; margin-bottom:3px;}
 
   .badge{
     display:inline-block; padding:3px 10px; border-radius:999px;
@@ -221,7 +268,10 @@
   html[data-theme="dark"] .badge-media{color:#E0B44A;}
   .badge-baixa{background:var(--surface-3); color:var(--text-dim);}
   .badge-pendente{background:rgba(14,123,166,.13); color:var(--brand-dark);}
-  html[data-theme="dark"] .badge-pendente{color:#6FC4E8;}
+  /* O fundo do light (rgba fixa, tom do --brand antigo) também era azul --
+     não bastava trocar só o texto. No dark os dois usam --brand, que agora é
+     dourado, não azul. */
+  html[data-theme="dark"] .badge-pendente{background:rgba(216,135,58,.16); color:var(--brand);}
   .badge-validado{background:var(--success-bg); color:var(--success);}
   .badge-devolvido{background:var(--danger-bg); color:var(--danger);}
   /* Sem line-through aqui: "Removido no aparelho" riscado fica difícil de ler,
@@ -651,6 +701,10 @@
   .mapa-leaflet .leaflet-popup-tip{background:var(--surface);}
   .mapa-leaflet .leaflet-popup-content{font-size:12.5px; margin:10px 12px; line-height:1.5;}
   .mapa-vazio{display:flex; align-items:center; justify-content:center; height:340px; color:var(--text-dim); font-size:13.5px; text-align:center;}
+  /* Legenda de cor por prioridade (Histórico, 19/09) -- mesma ideia do print
+     de referência: bolinha colorida + rótulo, no canto oposto do título. */
+  .mapa-legenda{display:flex; align-items:center; gap:10px; font-size:11.5px; color:var(--text-dim);}
+  .legenda-dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px; vertical-align:middle;}
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 </head>
@@ -723,6 +777,11 @@
     // vai ao servidor. Ter os dois deixava dois selects "Todas as fazendas"
     // empilhados na mesma tela, fazendo coisas diferentes.
     filtrosHist: { busca: "", status: "", tipo: "", encarregado: "" },
+    // Qual linha do Histórico está em destaque (card + mapa), 19/09.
+    // { ativId, maquinaUuid } -- maquinaUuid null identifica a linha "padrão
+    // de obra" (uma produção só, sem máquina própria). Null = nada escolhido
+    // ainda, e renderTelaHistorico() resolve pra primeira linha da lista.
+    historicoSelecionado: null,
     relatorioAtualId: null,
     cadastrosAdmin: [], categoriaAtiva: "cliente", cadastrosCarregados: false,
     regrasAdmin: [], regrasCarregadas: false,
@@ -2165,6 +2224,202 @@
     });
   }
 
+  /* ---------- Destaque do Histórico: card + mapa (19/09) ----------
+     Estrutura do painel de referência que o Fábio mandou (prospecção
+     comercial, biomassa): KPIs, um card do item em foco lado a lado com um
+     mapa, e só então a tabela cheia. O mapeamento dos campos que não têm
+     equivalente direto no RDO (pontuação 0-100, aptidão comercial, resumo da
+     visita) foi acertado com ele antes de escrever isto -- ver o plano desta
+     sessão. */
+
+  // Identifica uma linha de forma estável entre renders: atividade + uuid da
+  // máquina (null na "padrão de obra", que não tem máquina própria).
+  function chaveDoApontamento(ap){
+    return { ativId: ap.ativ.id, maquinaUuid: (ap.prod && ap.prod.maquina_uuid) || null };
+  }
+
+  // Qual apontamento fica em destaque. Se a seleção salva não bate com nada
+  // da lista FILTRADA (filtro mudou, ou o item saiu da lista), cai pro
+  // primeiro -- sempre tem algo no card, nunca um card vazio à toa.
+  //
+  // Resolvida aqui dentro do render (não só no clique) porque a entrada na
+  // tela, ou a troca de filtro, também precisam decidir sozinhas, sem
+  // esperar um clique que talvez nunca aconteça.
+  function apontamentoEmDestaque(lista){
+    var chave = App.historicoSelecionado;
+    if (chave){
+      var achado = lista.filter(function(ap){
+        var k = chaveDoApontamento(ap);
+        return k.ativId === chave.ativId && k.maquinaUuid === chave.maquinaUuid;
+      })[0];
+      if (achado) return achado;
+    }
+    return lista[0] || null;
+  }
+
+  // Contagens sobre a lista FILTRADA -- não a lista inteira -- para os
+  // números baterem com o que a tabela mostra logo abaixo. KPI que discorda
+  // da tabela na mesma tela é o tipo de coisa que faz o revisor achar que o
+  // filtro está quebrado.
+  function kpisHistorico(lista){
+    var pendentes = 0, devolvidos = 0, altaPrioridade = 0, removidos = 0;
+    lista.forEach(function(ap){
+      var classeStatus = statusApontamento(ap).classe;
+      if (classeStatus === "pendente") pendentes++;
+      else if (classeStatus === "devolvido") devolvidos++;
+      else if (classeStatus === "removida") removidos++;
+      if (prioridadeApontamento(ap).classe === "alta") altaPrioridade++;
+    });
+    return { total: lista.length, pendentes: pendentes, devolvidos: devolvidos,
+             altaPrioridade: altaPrioridade, removidos: removidos };
+  }
+
+  function renderKpisHistoricoHtml(lista){
+    var k = kpisHistorico(lista);
+    return '<div class="kpi-row">'+
+      '<div class="kpi-card"><p class="valor">'+k.total+'</p><p class="label">Apontamentos no período</p></div>'+
+      '<div class="kpi-card"><p class="valor">'+k.pendentes+'</p><p class="label">Pendentes de revisão</p></div>'+
+      '<div class="kpi-card"><p class="valor">'+k.devolvidos+'</p><p class="label">Devolvidos, aguardando correção</p></div>'+
+      '<div class="kpi-card"><p class="valor">'+k.altaPrioridade+'</p><p class="label">Alta prioridade</p></div>'+
+      '<div class="kpi-card"><p class="valor">'+k.removidos+'</p><p class="label">Removidos no aparelho</p></div>'+
+    '</div>';
+  }
+
+  // Card do apontamento em destaque. Mesmo dado que a tabela já mostra em 13
+  // colunas, só que em leitura vertical -- pra decidir o que fazer com AQUELE
+  // apontamento sem rolar a tabela de lado.
+  //
+  // "Composição da pontuação"/"Aptidão comercial"/"Resumo da visita" do
+  // painel de referência não têm equivalente honesto aqui (ver mapeamento no
+  // plano): viram Nº do apontamento + badges, "Por que esta prioridade" (fatos
+  // reais, não pontuação inventada), Observação e Motivo da devolução.
+  // "Aptidão comercial" não entra -- é um classificador de negócio de terras,
+  // sem análogo no RDO.
+  function renderDetalheHistoricoHtml(ap){
+    if (!ap){
+      return '<div class="hist-detalhe-card"><div class="empty-state">Nenhum apontamento para mostrar aqui.</div></div>';
+    }
+    var a = ap.ativ, p = ap.prod || {};
+    var prio = prioridadeApontamento(ap);
+    var st = statusApontamento(ap);
+    var prodFmt = producaoFormatada(p);
+    var upTrecho = [p.up || a.up, p.trecho || a.trecho].filter(function(v){ return v; }).join(" · ") || "—";
+    var maquinaTxt = p.equipamento ? (p.equipamento + (p.operador ? " · "+p.operador : "")) : "todo o apontamento";
+
+    var html = '<div class="hist-detalhe-card">'+
+      '<div class="hist-detalhe-head">'+
+        '<div>'+
+          '<p class="hist-detalhe-titulo">'+esc(a.tipo_atividade || "Apontamento")+'</p>'+
+          '<p class="hist-detalhe-sub">'+esc(ap.fazenda || "—")+' · '+esc(ap.encarregado || "—")+'</p>'+
+        '</div>'+
+        '<div class="hist-detalhe-num">'+(a.numero != null ? "#"+esc(String(a.numero)) : "—")+'</div>'+
+      '</div>'+
+      '<div class="hist-detalhe-badges">'+
+        '<span class="badge badge-'+prio.classe+'" title="'+esc(prio.motivo)+'">'+esc(prio.rotulo)+'</span>'+
+        '<span class="badge badge-'+st.classe+'"'+(st.motivo?' title="'+esc(st.motivo)+'"':'')+'>'+esc(st.rotulo)+'</span>'+
+      '</div>'+
+      '<div class="hist-detalhe-grid">'+
+        '<div><label>Descrição (tarifa)</label>'+(p.descricao_atividade ? esc(p.descricao_atividade) : '<span class="col-sem-descricao">sem descrição</span>')+'</div>'+
+        '<div><label>Máquina / operador</label>'+esc(maquinaTxt)+'</div>'+
+        '<div><label>Produção</label>'+esc(prodFmt.texto)+'</div>'+
+        '<div><label>UP · Trecho</label>'+esc(upTrecho)+'</div>'+
+        '<div><label>Data do RDO</label>'+formatarData(ap.data)+'</div>'+
+        '<div><label>Frente/Equipe</label>'+esc(ap.frente || "—")+'</div>'+
+      '</div>';
+
+    // "Por que esta prioridade": fatos de verdade, não 5 categorias pesadas
+    // inventadas. A única barra proporcional genuína é dias em aberto (capada
+    // em 7 dias = cheia, que já é território de prioridade Alta); o resto é
+    // texto simples, porque não são grandezas comparáveis entre si.
+    var dias = diasDesde(ap.sincronizadoEm || ap.data);
+    html += '<div class="hist-detalhe-fatos">'+
+      '<p class="hist-detalhe-fatos-titulo">Por que esta prioridade</p>'+
+      (dias != null
+        ? '<div class="fato-linha"><span>Dias em aberto</span><span>'+dias+'</span></div>'+
+          '<div class="fato-barra"><div class="fato-barra-fill" style="width:'+Math.min(100, Math.round(dias/7*100))+'%"></div></div>'
+        : '')+
+      '<div class="fato-linha"><span>Sincronizado em</span><span>'+formatarDataHora(ap.sincronizadoEm)+'</span></div>'+
+      (a.revisado_em ? '<div class="fato-linha"><span>Revisado em</span><span>'+formatarDataHora(a.revisado_em)+'</span></div>' : '')+
+      (a.editado_em ? '<div class="fato-linha"><span>Editado no painel em</span><span>'+formatarDataHora(a.editado_em)+'</span></div>' : '')+
+    '</div>';
+
+    if (a.observacao){
+      html += '<div class="hist-detalhe-nota"><label>Observação</label>'+esc(a.observacao)+'</div>';
+    }
+    if (st.classe === "devolvido" && a.motivo_devolucao){
+      html += '<div class="hist-detalhe-nota aviso"><label>Motivo da devolução</label>'+esc(a.motivo_devolucao)+'</div>';
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  // Agrupa a lista filtrada por RELATÓRIO -- várias produções compartilham o
+  // mesmo gps_lat/gps_lng (é o mesmo RDO), então um pino por relatório, não
+  // por linha da tabela. Guarda a MAIOR prioridade entre as produções
+  // daquele relatório, pra colorir o pino como a legenda do print.
+  function pontosMapaHistorico(lista){
+    var ordem = { alta: 3, media: 2, baixa: 1 };
+    var porRelatorio = {};
+    lista.forEach(function(ap){
+      var r = ap.rel;
+      if (r.gps_lat == null || r.gps_lng == null) return;
+      var classe = prioridadeApontamento(ap).classe;
+      if (!porRelatorio[r.id]){
+        porRelatorio[r.id] = { rel: r, primeiraAp: ap, prioridadeClasse: classe };
+      } else if (ordem[classe] > ordem[porRelatorio[r.id].prioridadeClasse]){
+        porRelatorio[r.id].prioridadeClasse = classe;
+      }
+    });
+    return Object.keys(porRelatorio).map(function(k){ return porRelatorio[k]; });
+  }
+
+  // Cores sólidas pro pino do mapa -- independentes do tema (o tile do OSM é
+  // sempre claro, então a escolha é por contraste com o mapa, não com o app).
+  // Mesma paleta da legenda: laranja/dourado/cinza, igual ao print.
+  var CORES_PRIORIDADE_MAPA = { alta: "#E8871E", media: "#E0A800", baixa: "#8A8A8E" };
+
+  // Mesmo padrão de renderMapaFrentes() (Leaflet + OSM + circleMarker),
+  // reaproveitando a MESMA instância/limpeza (_leafletMap, zerada no topo de
+  // render()) -- Dashboard e Histórico nunca desenham mapa ao mesmo tempo.
+  function renderMapaHistorico(){
+    var div = document.getElementById("mapa-leaflet");
+    if (!div || typeof L === "undefined") return;
+    if (_leafletMap){ try { _leafletMap.remove(); } catch(e){} _leafletMap = null; }
+
+    var pontos = pontosMapaHistorico(apontamentosFiltrados());
+    if (!pontos.length) return;
+
+    _leafletMap = L.map(div, { scrollWheelZoom: true });
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(_leafletMap);
+
+    var latLngs = [];
+    pontos.forEach(function(pt){
+      var cor = CORES_PRIORIDADE_MAPA[pt.prioridadeClasse] || CORES_PRIORIDADE_MAPA.baixa;
+      var marker = L.circleMarker([pt.rel.gps_lat, pt.rel.gps_lng], {
+        radius: 8, color: "#fff", weight: 2, fillColor: cor, fillOpacity: 0.9
+      });
+      marker.bindPopup(
+        "<b>"+esc(pt.rel.fazenda||"Fazenda não informada")+"</b><br>"+
+        esc(pt.primeiraAp.ativ.tipo_atividade || "—")+"<br>"+
+        formatarData(pt.rel.data_relatorio)
+      );
+      marker.on("click", function(){
+        App.historicoSelecionado = chaveDoApontamento(pt.primeiraAp);
+        render();
+      });
+      marker.addTo(_leafletMap);
+      latLngs.push([pt.rel.gps_lat, pt.rel.gps_lng]);
+    });
+
+    var bounds = L.latLngBounds(latLngs);
+    _leafletMap.fitBounds(bounds.pad(0.35), { maxZoom: 12 });
+    setTimeout(function(){ if (_leafletMap) _leafletMap.invalidateSize(); }, 60);
+  }
+
   function renderTelaHistorico(){
     var todos = apontamentosPlanificados();
     var lista = apontamentosFiltrados();
@@ -2203,6 +2458,34 @@
     if (App.carregandoRelatorios){
       return html + '<div class="spinner-wrap"><div class="spinner"></div></div>';
     }
+
+    // 19/09: KPIs + card de destaque (apontamento em foco + mapa), antes da
+    // tabela cheia -- estrutura do painel de referência. A seleção é
+    // resolvida e regravada aqui (não só no clique) porque a entrada na tela
+    // e a troca de filtro também precisam de algo escolhido, sem esperar um
+    // clique que talvez nunca aconteça. Ver mapeamento de campos no plano
+    // desta sessão -- "Aptidão comercial" ficou de fora de propósito.
+    var apEmDestaque = apontamentoEmDestaque(lista);
+    App.historicoSelecionado = apEmDestaque ? chaveDoApontamento(apEmDestaque) : null;
+
+    html += renderKpisHistoricoHtml(lista);
+
+    var pontosMapa = pontosMapaHistorico(lista);
+    html += '<div class="hist-destaque">'+
+      renderDetalheHistoricoHtml(apEmDestaque)+
+      '<div class="mapa-wrap">'+
+        '<div class="mapa-head"><span class="mapa-titulo">Localização dos apontamentos</span>'+
+          '<span class="mapa-legenda">'+
+            '<span><span class="legenda-dot" style="background:#E8871E"></span>Alta</span>'+
+            '<span><span class="legenda-dot" style="background:#E0A800"></span>Média</span>'+
+            '<span><span class="legenda-dot" style="background:#8A8A8E"></span>Baixa</span>'+
+          '</span>'+
+        '</div>'+
+        (pontosMapa.length
+          ? '<div class="mapa-leaflet" id="mapa-leaflet"></div>'
+          : '<div class="mapa-vazio">Nenhum apontamento com localização GPS registrada neste filtro.</div>')+
+      '</div>'+
+    '</div>';
 
     html += '<div class="card-hist">'+
       '<div class="card-hist-head">'+
@@ -2304,7 +2587,15 @@
       // poupa o revisor de procurar de novo qual linha era.
       var repetida = !ap.primeiraDoApontamento;
 
-      return '<tr class="'+((removido||producaoRemovida)?"linha-removida ":"")+(repetida?"linha-irma":"")+'">'+
+      // 19/09: destaca a linha que está no card acima (clique na tabela ou
+      // no mapa) -- mesma chave que chaveDoApontamento()/apontamentoEmDestaque()
+      // usam, pra nunca discordar de qual linha está selecionada.
+      var chaveLinha = chaveDoApontamento(ap);
+      var estaSelecionada = !!(App.historicoSelecionado
+        && App.historicoSelecionado.ativId === chaveLinha.ativId
+        && App.historicoSelecionado.maquinaUuid === chaveLinha.maquinaUuid);
+
+      return '<tr class="'+((removido||producaoRemovida)?"linha-removida ":"")+(repetida?"linha-irma ":"")+(estaSelecionada?"linha-selecionada":"")+'" data-ativ-id="'+esc(a.id)+'" data-maquina-uuid="'+esc(chaveLinha.maquinaUuid||"")+'">'+
         '<td class="col-num">'+(a.numero != null ? "#"+esc(a.numero) : "—")+
           (ap.totalProducoes > 1 ? '<div class="col-sub">'+ap.totalProducoes+' linhas</div>' : '')+'</td>'+
         '<td class="col-fazenda">'+esc(ap.fazenda || "—")+'</td>'+
@@ -2383,6 +2674,24 @@
     ligarFiltro("h-encarregado", "encarregado", "onchange");
     ligarFiltro("h-status", "status", "onchange");
 
+    renderMapaHistorico();
+
+    // 19/09: clicar numa linha (fora dos botões de ação) coloca aquele
+    // apontamento em destaque no card + mapa acima. O guard por
+    // closest("button") é o que impede o clique em Editar/Devolver de
+    // TAMBÉM disparar este render() -- os dois brigariam pelo próximo
+    // desenho da tela, e o de abrirEdicaoApontamento/pedirDevolucaoDeAtividade
+    // é quem tem que vencer.
+    document.querySelectorAll(".tabela-hist tbody tr[data-ativ-id]").forEach(function(tr){
+      tr.onclick = function(e){
+        if (e.target.closest("button")) return;
+        App.historicoSelecionado = {
+          ativId: tr.getAttribute("data-ativ-id"),
+          maquinaUuid: tr.getAttribute("data-maquina-uuid") || null
+        };
+        render();
+      };
+    });
 
     document.querySelectorAll('[data-action="hist-devolver"]').forEach(function(btn){
       btn.onclick = function(){
