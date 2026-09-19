@@ -14,7 +14,11 @@
     --accent:#C96010; --accent-dark:#A6500C;
     --success:#1F8C4C; --success-bg:rgba(31,140,76,.10);
     --danger:#C23B32; --danger-bg:rgba(194,59,50,.10);
-    --radius:4px; --radius-sm:3px;
+    /* 19/09 (ajuste visual): 4px/3px era quase reto -- o print de referência
+       tem cantos bem suaves em cards e modal. Um valor só, então o efeito
+       chega em tudo que já usa var(--radius)/var(--radius-sm) sem precisar
+       caçar seletor por seletor. */
+    --radius:14px; --radius-sm:8px;
     --shadow:none;
   }
   /* 19/09: era azul-marinho (canal B > G > R em --bg/--surface/--border, e
@@ -161,7 +165,14 @@
   .card-hist-head .contagem{font-size:12.5px; color:var(--text-dim);}
   /* Rolagem dentro do card, não na página: o cabeçalho da tabela fica preso no
      topo e o revisor não perde de vista qual coluna é qual em 20+ linhas. */
-  .card-hist-scroll{max-height:calc(100vh - 300px); overflow:auto;}
+  /* 19/09: 300px era o valor certo quando a tela era filtros+tabela só. Com
+     KPIs e o card+mapa (300px fixos) entrando ACIMA da tabela, o que sobra
+     de verdade é bem menor -- medido no artefato real (getBoundingClientRect
+     do topo da tabela + padding de baixo do app-main), não estimado de
+     cabeça. Sem essa correção a tabela pedia mais altura do que a viewport
+     tinha, e a PÁGINA rolava -- exatamente o que a referência não faz (só a
+     tabela rola lá). */
+  .card-hist-scroll{max-height:calc(100vh - 710px); overflow:auto;}
 
   .tabela-hist{width:100%; border-collapse:collapse;}
   .tabela-hist th{
@@ -181,10 +192,14 @@
      horizontal -- e sem isto a coluna de Editar/Devolver, que é a AÇÃO da tela,
      ficava fora da vista até o revisor rolar. Coluna de ação escondida atrás de
      rolagem é o mesmo que não existir. */
+  /* 19/09 (ajuste visual): a borda vertical aqui era a única linha do tipo na
+     tabela inteira -- a referência não tem NENHUMA divisória vertical, só a
+     moldura de fora e a linha horizontal entre registros. O sticky continua
+     (a coluna de ações escondida atrás de rolagem é o mesmo que não existir),
+     só a barra que separava ela do resto saiu. */
   .tabela-hist td.col-acoes, .tabela-hist th:last-child{
     position:sticky; right:0; z-index:2;
     background:var(--surface); white-space:nowrap; text-align:right;
-    border-left:1px solid var(--border);
   }
   .tabela-hist th:last-child{z-index:3;}
   /* O hover pinta a linha, mas a célula grudada tem fundo próprio -- sem isto
@@ -227,14 +242,30 @@
      card com o apontamento em foco lado a lado com o mapa, e só então a
      tabela cheia. Em telas estreitas empilha (o painel é de mesa, mas 1024px
      já é apertado para 2 colunas de largura mínima 320px+resto). */
-  .hist-destaque{display:grid; grid-template-columns:minmax(320px,420px) 1fr; gap:16px; margin-bottom:22px; align-items:stretch;}
-  @media (max-width:900px){ .hist-destaque{grid-template-columns:1fr;} }
-  .hist-destaque .mapa-wrap{margin-bottom:0;}
-  .hist-destaque .mapa-leaflet{height:100%; min-height:360px;}
+  /* 19/09 (ajuste visual): largura MÁXIMA fixa (420px) fazia o card encolher
+     proporcionalmente conforme a tela cresce -- em 1920px sobrava só ~20%
+     pra ele e ~80% pro mapa, quando a referência é ~30/70. Porcentagem (com
+     piso de 320px pra não espremer demais em telas médias) acompanha a
+     largura da tela em vez de ficar presa a um valor fixo. */
+  /* 19/09 (ajuste de rolagem): no painel de referência só a TABELA rola --
+     o resto (KPIs, card + mapa) fica de altura fixa, porque é o volume de
+     apontamentos que cresce, não o card de destaque. Por isso a altura aqui
+     é um número fixo, não "o que o conteúdo pedir": card e mapa preenchem os
+     mesmos 300px (align-items:stretch não bastava -- ele só igualava os dois
+     ENTRE SI, deixando a linha crescer junto com o texto da Observação).
+     Card com texto mais longo que isso rola por dentro (overflow-y abaixo)
+     em vez de empurrar a página. Em telas estreitas (empilhado) volta a
+     altura livre -- não faz sentido forçar 300px em cada um empilhados. */
+  .hist-destaque{display:grid; grid-template-columns:minmax(320px,30%) 1fr; gap:16px; margin-bottom:22px; height:300px;}
+  @media (max-width:900px){ .hist-destaque{grid-template-columns:1fr; height:auto;} .hist-destaque .hist-detalhe-card, .hist-destaque .mapa-wrap{height:auto; min-height:300px;} }
+  .hist-destaque .mapa-wrap{margin-bottom:0; height:100%; display:flex; flex-direction:column;}
+  .hist-destaque .mapa-leaflet{flex:1; min-height:0; height:auto;}
+  .hist-destaque .mapa-vazio{height:auto; flex:1;}
 
   .hist-detalhe-card{
     background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
     padding:18px; display:flex; flex-direction:column; gap:14px;
+    height:100%; overflow-y:auto;
   }
   .hist-detalhe-head{display:flex; align-items:flex-start; justify-content:space-between; gap:10px;}
   .hist-detalhe-titulo{font-size:16px; font-weight:700; margin:0 0 2px;}
